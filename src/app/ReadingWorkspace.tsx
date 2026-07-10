@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, ChevronLeft, ChevronRight,
@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import * as Popover from "@radix-ui/react-popover";
 import * as Tabs from "@radix-ui/react-tabs";
+import { toast } from "sonner";
 import { useApp } from "./store";
 import { aiService, materialService, assignmentService } from "./services";
 import type { Material, VocabWord } from "./types";
@@ -23,9 +24,12 @@ export default function ReadingWorkspace() {
   const [focusMode, setFocusMode] = useState(false);
   const [currentPara, setCurrentPara] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [audioReady, setAudioReady] = useState(false);
   const [volume, setVolume] = useState(80);
   const [speed, setSpeed] = useState(1);
   const [progress, setProgress] = useState(10);
+  const [audioProgress, setAudioProgress] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedText, setSelectedText] = useState("");
   const [floatingPos, setFloatingPos] = useState({ x: 0, y: 0 });
@@ -33,6 +37,187 @@ export default function ReadingWorkspace() {
   const [explainResult, setExplainResult] = useState("");
   const [explaining, setExplaining] = useState(false);
   const [activeWord, setActiveWord] = useState<VocabWord | null>(null);
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const urlsRef = useRef<string[]>([]);
+  const chunkIndexRef = useRef(0);
+  const playingRef = useRef(false);
+  const cacheRef = useRef<Map<string, string[]>>(new Map());
+  const volumeRef = useRef(volume);
+  const speedRef = useRef(speed);
+
+  useEffect(() => { volumeRef.current = volume; }, [volume]);
+  useEffect(() => { speedRef.current = speed; }, [speed]);
+
+  const revokeUrls = useCallback((urls: string[]) => {
+    urls.forEach(u => URL.revokeObjectURL(u));
+  }, []);
+
+  const stopSpeech = useCallback(() => {
+    playingRef.current = false;
+    setPlaying(false);
+    const audio = audioRef.current;
+    if (audio) {
+      audio.onended = null;
+      audio.onerror = null;
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+    }
+  }, []);
+
+  const getTextToSpeak = useCallback(() => {
+    if (!material) return "";
+    if (focusMode) {
+      const paragraphs = material.simplifiedText.split(". ").filter(Boolean).map(s => s.trim().replace(/\.$/, "") + ".");
+      return paragraphs[currentPara] || material.simplifiedText;
+    }
+    return material.simplifiedText;
+  }, [material, focusMode, currentPara]);
+
+  const ensureAudioUrls = useCallback(async (text: string): Promise<string[]> => {
+    const cached = cacheRef.current.get(text);
+    if (cached?.length) return cached;
+    const urls = await aiService.generateAudioChunks(text);
+    cacheRef.current.set(text, urls);
+    return urls;
+  }, []);
+
+  const playChunk = useCallback(async (index: number) => {
+    const urls = urlsRef.current;
+    if (!urls.length || index >= urls.length) {
+      playingRef.current = false;
+      setPlaying(false);
+      setAudioProgress(100);
+      setProgress(p => Math.max(p, 80));
+      return;
+    }
+
+    chunkIndexRef.current = index;
+    setAudioProgress(Math.round((index / urls.length) * 100));
+
+    let audio = audioRef.current;
+    if (!audio) {
+      audio = new Audio();
+      audioRef.current = audio;
+    }
+
+    audio.pause();
+    audio.src = urls[index];
+    audio.volume = Math.max(0, Math.min(1, volumeRef.current / 100));
+    audio.playbackRate = speedRef.current;
+
+    audio.onended = () => {
+      if (!playingRef.current) return;
+      playChunk(index + 1);
+    };
+    audio.onerror = () => {
+      if (!playingRef.current) return;
+      playingRef.current = false;
+      setPlaying(false);
+      toast.error("Nuk u arrit të luhet audio.");
+    };
+
+    try {
+      await audio.play();
+      playingRef.current = true;
+      setPlaying(true);
+    } catch {
+      playingRef.current = false;
+      setPlaying(false);
+      toast.error("Shfletuesi bllokoi audion. Provo sërish.");
+    }
+  }, []);
+
+  const startSpeech = useCallback(async (fromIndex = 0) => {
+    if (!material) return;
+    const text = getTextToSpeak().trim();
+    if (!text) {
+      toast.error("Nuk ka tekst për të lexuar.");
+      return;
+    }
+
+    setAudioLoading(true);
+    try {
+      const urls = await ensureAudioUrls(text);
+      // Revoke previous non-cached urls if we replaced them - keep cache
+      urlsRef.current = urls;
+      setAudioReady(urls.length > 0);
+      playingRef.current = true;
+      setPlaying(true);
+      await playChunk(Math.max(0, Math.min(fromIndex, urls.length - 1)));
+    } catch (err) {
+      playingRef.current = false;
+      setPlaying(false);
+      const message = err instanceof Error ? err.message : "Nuk u gjenerua audio.";
+      toast.error(message);
+    } finally {
+      setAudioLoading(false);
+    }
+  }, [material, getTextToSpeak, ensureAudioUrls, playChunk]);
+
+  const togglePlay = useCallback(async () => {
+    if (audioLoading) return;
+
+    if (playingRef.current) {
+      const audio = audioRef.current;
+      if (audio && !audio.paused) {
+        audio.pause();
+        playingRef.current = false;
+        setPlaying(false);
+        return;
+      }
+      stopSpeech();
+      return;
+    }
+
+    // Resume if we have a paused audio mid-chunk
+    const audio = audioRef.current;
+    if (audio && audio.src && audio.paused && audio.currentTime > 0 && chunkIndexRef.current < urlsRef.current.length) {
+      try {
+        audio.volume = Math.max(0, Math.min(1, volumeRef.current / 100));
+        audio.playbackRate = speedRef.current;
+        await audio.play();
+        playingRef.current = true;
+        setPlaying(true);
+        return;
+      } catch {
+        // fall through to restart
+      }
+    }
+
+    await startSpeech(chunkIndexRef.current);
+  }, [audioLoading, startSpeech, stopSpeech]);
+
+  const skipBack = useCallback(() => {
+    const next = Math.max(0, chunkIndexRef.current - 1);
+    if (playingRef.current || urlsRef.current.length) {
+      if (playingRef.current) playChunk(next);
+      else {
+        chunkIndexRef.current = next;
+        setAudioProgress(urlsRef.current.length ? Math.round((next / urlsRef.current.length) * 100) : 0);
+      }
+    }
+  }, [playChunk]);
+
+  const skipForward = useCallback(() => {
+    const next = Math.min(Math.max(0, urlsRef.current.length - 1), chunkIndexRef.current + 1);
+    if (playingRef.current || urlsRef.current.length) {
+      if (playingRef.current) playChunk(next);
+      else {
+        chunkIndexRef.current = next;
+        setAudioProgress(urlsRef.current.length ? Math.round((next / urlsRef.current.length) * 100) : 0);
+      }
+    }
+  }, [playChunk]);
+
+  // Live volume / speed on current audio element
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.volume = Math.max(0, Math.min(1, volume / 100));
+    audio.playbackRate = speed;
+  }, [volume, speed]);
 
   useEffect(() => {
     if (!id) return;
@@ -45,6 +230,21 @@ export default function ReadingWorkspace() {
       }
     });
   }, [id, user]);
+
+  useEffect(() => () => {
+    stopSpeech();
+    cacheRef.current.forEach(urls => revokeUrls(urls));
+    cacheRef.current.clear();
+  }, [stopSpeech, revokeUrls, id]);
+
+  // Reset audio when focus paragraph changes
+  useEffect(() => {
+    stopSpeech();
+    chunkIndexRef.current = 0;
+    setAudioProgress(0);
+    urlsRef.current = [];
+    setAudioReady(false);
+  }, [focusMode, currentPara, stopSpeech]);
 
   if (loading) {
     return (
@@ -150,10 +350,12 @@ export default function ReadingWorkspace() {
               </button>
             </div>
             <div className="w-px h-5 bg-border" />
-            <button onClick={() => setPlaying(!playing)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${playing ? "bg-primary text-primary-foreground" : "border border-border hover:bg-muted"}`}>
-              {playing ? <Pause size={13} /> : <Headphones size={13} />}
-              {playing ? "Ndal" : "Dëgo"}
+            <button type="button" onClick={togglePlay} disabled={audioLoading}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors disabled:opacity-60 ${playing ? "bg-primary text-primary-foreground" : "border border-border hover:bg-muted"}`}>
+              {audioLoading ? (
+                <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : playing ? <Pause size={13} /> : <Headphones size={13} />}
+              {audioLoading ? "Duke përgatitur..." : playing ? "Ndal" : "Dëgo"}
             </button>
           </div>
 
@@ -262,18 +464,27 @@ export default function ReadingWorkspace() {
           {/* Audio player */}
           <div className="mt-4 bg-card border border-border rounded-2xl p-4">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-              <Headphones size={12} /> Kjo zë u gjenerua duke përdorur inteligjencën artificiale.
+              <Headphones size={12} />
+              {audioLoading
+                ? "Duke gjeneruar zërin në shqip... (disa sekonda)"
+                : "Dëgjo tekstin me zë në shqip. Mund të ndryshosh volumin dhe shpejtësinë."}
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={() => setPlaying(!playing)}
-                className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-colors" aria-label={playing ? "Ndal" : "Luaj"}>
-                {playing ? <Pause size={18} /> : <Play size={18} />}
+              <button type="button" onClick={togglePlay} disabled={audioLoading}
+                className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-colors disabled:opacity-60" aria-label={playing ? "Ndal" : "Luaj"}>
+                {audioLoading ? (
+                  <span className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                ) : playing ? <Pause size={18} /> : <Play size={18} />}
               </button>
-              <button className="p-2 rounded-lg hover:bg-muted" aria-label="Kthehu 10 sekonda"><SkipBack size={16} /></button>
-              <div className="flex-1 h-1.5 bg-muted rounded-full relative cursor-pointer">
-                <div className="absolute inset-y-0 left-0 bg-primary rounded-full" style={{ width: "35%" }} />
+              <button type="button" onClick={skipBack} disabled={audioLoading || !audioReady} className="p-2 rounded-lg hover:bg-muted disabled:opacity-40" aria-label="Pjesa e mëparshme">
+                <SkipBack size={16} />
+              </button>
+              <div className="flex-1 h-1.5 bg-muted rounded-full relative overflow-hidden">
+                <div className="absolute inset-y-0 left-0 bg-primary rounded-full transition-all" style={{ width: `${audioProgress}%` }} />
               </div>
-              <button className="p-2 rounded-lg hover:bg-muted" aria-label="Para 10 sekonda"><SkipForward size={16} /></button>
+              <button type="button" onClick={skipForward} disabled={audioLoading || !audioReady} className="p-2 rounded-lg hover:bg-muted disabled:opacity-40" aria-label="Pjesa e radhës">
+                <SkipForward size={16} />
+              </button>
               <div className="flex items-center gap-1">
                 <Volume2 size={14} className="text-muted-foreground" />
                 <input type="range" min={0} max={100} value={volume} onChange={e => setVolume(Number(e.target.value))}
@@ -281,7 +492,7 @@ export default function ReadingWorkspace() {
               </div>
               <div className="flex gap-1">
                 {[0.75, 1, 1.25].map(s => (
-                  <button key={s} onClick={() => setSpeed(s)}
+                  <button type="button" key={s} onClick={() => setSpeed(s)}
                     className={`text-xs px-2 py-1 rounded-lg transition-colors ${speed === s ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
                     {s}×
                   </button>

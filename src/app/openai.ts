@@ -213,3 +213,81 @@ export async function translateWithAI(text: string, lang: string): Promise<strin
     { temperature: 0.2 }
   );
 }
+
+const TTS_URL = "https://api.openai.com/v1/audio/speech";
+const MAX_TTS_CHARS = 3500;
+
+/** Split long Albanian text into TTS-sized chunks (prefer sentence boundaries). */
+export function chunkTextForTTS(text: string): string[] {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (!clean) return [];
+  if (clean.length <= MAX_TTS_CHARS) return [clean];
+
+  const sentences = clean.split(/(?<=[.!?…])\s+/).filter(Boolean);
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const sentence of sentences) {
+    if ((current + " " + sentence).trim().length <= MAX_TTS_CHARS) {
+      current = (current + " " + sentence).trim();
+    } else {
+      if (current) chunks.push(current);
+      if (sentence.length <= MAX_TTS_CHARS) {
+        current = sentence;
+      } else {
+        // Hard-split very long sentences
+        for (let i = 0; i < sentence.length; i += MAX_TTS_CHARS) {
+          chunks.push(sentence.slice(i, i + MAX_TTS_CHARS));
+        }
+        current = "";
+      }
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+/**
+ * Generate spoken audio for Albanian text via OpenAI TTS.
+ * Uses gpt-4o-mini-tts with Albanian instructions when available; falls back to tts-1.
+ */
+export async function synthesizeAlbanianSpeech(text: string): Promise<Blob> {
+  const input = text.trim().slice(0, MAX_TTS_CHARS);
+  if (!input) throw new Error("Nuk ka tekst për audio.");
+
+  const key = getApiKey();
+  const tryRequest = async (body: Record<string, unknown>) => {
+    const res = await fetch(TTS_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const msg = (err as { error?: { message?: string } })?.error?.message || res.statusText;
+      throw new Error(msg);
+    }
+    return res.blob();
+  };
+
+  try {
+    return await tryRequest({
+      model: "gpt-4o-mini-tts",
+      voice: "nova",
+      input,
+      instructions:
+        "Speak in clear, natural Albanian (Shqip). Use correct Albanian pronunciation. Do not use an English accent. Read at a calm, educational pace suitable for children.",
+    });
+  } catch {
+    // Fallback for accounts without gpt-4o-mini-tts
+    return tryRequest({
+      model: "tts-1",
+      voice: "nova",
+      input,
+    });
+  }
+}
+

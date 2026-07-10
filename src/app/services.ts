@@ -10,6 +10,8 @@ import {
   explainSentenceWithAI,
   explainWordWithAI,
   translateWithAI,
+  synthesizeAlbanianSpeech,
+  chunkTextForTTS,
   type AdaptMaterialOptions,
   type AdaptedMaterial,
 } from "./openai";
@@ -296,9 +298,19 @@ export const aiService = {
     return result.teacherNotes;
   },
 
-  async generateAudio(_text: string): Promise<string> {
-    await delay(400);
-    return "mock-audio-url";
+  async generateAudio(text: string): Promise<string> {
+    const blob = await synthesizeAlbanianSpeech(text);
+    return URL.createObjectURL(blob);
+  },
+
+  async generateAudioChunks(text: string): Promise<string[]> {
+    const parts = chunkTextForTTS(text);
+    const urls: string[] = [];
+    for (const part of parts) {
+      const blob = await synthesizeAlbanianSpeech(part);
+      urls.push(URL.createObjectURL(blob));
+    }
+    return urls;
   },
 };
 
