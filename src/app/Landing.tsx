@@ -29,9 +29,9 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto px-5 h-16 flex items-center gap-4">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center">
-              <span className="text-white font-bold text-sm">L</span>
+              <span className="text-white font-bold text-sm">M</span>
             </div>
-            <span className="font-bold text-foreground">LexoLehtë AI</span>
+            <span className="font-bold text-foreground">MësoLehtë AI</span>
           </div>
           <div className="ml-auto flex items-center gap-3">
             <Link to="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-2">{t("landing.signIn")}</Link>
@@ -53,7 +53,7 @@ export default function Landing() {
             {t("landing.hero")}
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8 leading-relaxed">
-            LexoLehtë AI ndihmon mësuesit të thjeshtësojnë, përmbledhin dhe adaptojnë materialet mësimore për nxënësit që kanë vështirësi me leximin dhe kuptimin.
+            MësoLehtë AI ndihmon mësuesit të thjeshtësojnë, përmbledhin dhe adaptojnë materialet mësimore për nxënësit që kanë vështirësi me leximin dhe kuptimin.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link to="/login" className="ui-btn-primary px-7 py-3.5 text-base">
@@ -74,7 +74,7 @@ export default function Landing() {
                 <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
                 <div className="w-3 h-3 rounded-full bg-muted-foreground/20" />
               </div>
-              <div className="flex-1 mx-3 bg-background rounded-md px-3 py-1 text-xs text-muted-foreground">lexolehte.ai/teacher/dashboard</div>
+              <div className="flex-1 mx-3 bg-background rounded-md px-3 py-1 text-xs text-muted-foreground">mesolehte.ai/teacher/dashboard</div>
             </div>
             <div className="p-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
@@ -196,7 +196,7 @@ export default function Landing() {
 
       {/* Footer */}
       <footer className="border-t border-border py-8 px-5 text-center text-sm text-muted-foreground">
-        <p>© 2026 LexoLehtë AI — Çdo tekst, në nivelin e duhur për çdo nxënës.</p>
+        <p>© 2026 MësoLehtë AI — Çdo tekst, në nivelin e duhur për çdo nxënës.</p>
       </footer>
     </div>
   );

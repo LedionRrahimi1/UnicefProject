@@ -57,10 +57,10 @@ const delay = (ms = 300) => new Promise(res => setTimeout(res, ms));
 export const authService = {
   async login(email: string, _password: string) {
     await delay(500);
-    if (email === "mesuesi@lexolehte.com") {
+    if (email === "mesuesi@mesolehte.com") {
       return { id: "teacher-1", name: "Arta Osmani", email, role: "teacher" as const };
     }
-    if (email === "nxenesi@lexolehte.com") {
+    if (email === "nxenesi@mesolehte.com") {
       return { id: "stu-1", name: "Ardi Hoxha", email, role: "student" as const, class: "VI-1" };
     }
     throw new Error("Email ose fjalëkalimi është i gabuar.");
@@ -81,7 +81,7 @@ export const materialService = {
   async create(data: Partial<Material>): Promise<Material> {
     await delay(300);
     const mat: Material = {
-      id: `mat-${Date.now()}`,
+      id: data.id ?? `mat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       title: data.title ?? "Material i ri",
       subject: data.subject ?? "",
       class: data.class ?? "",
@@ -96,9 +96,13 @@ export const materialService = {
       illustrations: data.illustrations ?? [],
       status: "draft",
       createdAt: new Date().toISOString().split("T")[0],
-      studentCount: 0,
+      studentCount: data.targetStudentIds?.length ?? 0,
       completionRate: 0,
       estimatedMinutes: data.estimatedMinutes ?? 15,
+      targetStudentIds: data.targetStudentIds,
+      adaptationGroupId: data.adaptationGroupId,
+      adaptationKey: data.adaptationKey,
+      adaptationLabel: data.adaptationLabel,
     };
     setMaterials([mat, ...getMaterials()]);
     return mat;
@@ -653,8 +657,8 @@ export const analyticsService = {
 
 // ── Gamification ──────────────────────────────────────────────────────────────
 
-const LS_XP_KEY = "lexolehte_xp";
-const LS_BADGES_KEY = "lexolehte_badges";
+const LS_XP_KEY = "mesolehte_xp";
+const LS_BADGES_KEY = "mesolehte_badges";
 
 function loadXP(): XPTransaction[] {
   try {

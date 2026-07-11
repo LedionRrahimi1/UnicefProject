@@ -1,7 +1,7 @@
 import type { LearningEvent, LearningEventType } from "./types";
 
-const EVENTS_KEY = "lexolehte_learning_events_v1";
-const SESSION_START_KEY = "lexolehte_session_start_v1";
+const EVENTS_KEY = "mesolehte_learning_events_v1";
+const SESSION_START_KEY = "mesolehte_session_start_v1";
 
 function loadEvents(): LearningEvent[] {
   try {

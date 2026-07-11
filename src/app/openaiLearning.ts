@@ -145,7 +145,7 @@ sessionCount: ${existingProfile.sessionCount}`
     ? "\nKy nxënës preferon mënyrën vizuale (figura, ilustrime). Në preferredFormats dhe teacherRecommendations thekso mbështetjen me figura dhe shpjegime vizuale."
     : "";
 
-  const system = `Je asistent pedagogjik për LexoLehtë AI.
+  const system = `Je asistent pedagogjik për MësoLehtë AI.
 ${PEDAGOGY_RULES}
 Kthen VETËM JSON. Raporti për mësuesen (fullTeacherReport) duhet 200-250 fjalë.`;
 

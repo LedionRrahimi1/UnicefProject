@@ -48,10 +48,10 @@ export default function StudentLayout() {
       <aside className="hidden lg:flex flex-col w-60 bg-sidebar border-r border-sidebar-border shrink-0">
         <div className="flex items-center gap-3 px-4 py-5">
           <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center shadow-sm shadow-primary/30">
-            <span className="text-white font-extrabold text-lg">L</span>
+            <span className="text-white font-extrabold text-lg">M</span>
           </div>
           <div>
-            <p className="font-extrabold text-sm text-foreground leading-tight">LexoLehtë AI</p>
+            <p className="font-extrabold text-sm text-foreground leading-tight">MësoLehtë AI</p>
             <p className="text-xs text-muted-foreground font-medium">{t("nav.studentSpace")}</p>
           </div>
         </div>
@@ -79,9 +79,9 @@ export default function StudentLayout() {
         <div className="flex items-center justify-between px-4 py-4">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-2xl bg-primary flex items-center justify-center">
-              <span className="text-white font-extrabold">L</span>
+              <span className="text-white font-extrabold">M</span>
             </div>
-            <span className="font-extrabold text-sm">LexoLehtë AI</span>
+            <span className="font-extrabold text-sm">MësoLehtë AI</span>
           </div>
           <button onClick={() => setMobileOpen(false)} className="p-2.5 hover:bg-muted rounded-2xl min-h-11 min-w-11 flex items-center justify-center" aria-label={t("a11y.close")}>
             <X size={18} />

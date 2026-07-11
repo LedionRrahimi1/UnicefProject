@@ -34,11 +34,11 @@ export default function TeacherLayout() {
     <div className="flex flex-col h-full">
       <div className={`flex items-center gap-3 px-4 py-5 ${collapsed ? "justify-center" : ""}`}>
         <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center shrink-0 shadow-sm shadow-primary/30">
-          <span className="text-white font-extrabold text-lg">L</span>
+          <span className="text-white font-extrabold text-lg">M</span>
         </div>
         {!collapsed && (
           <div className="min-w-0">
-            <p className="font-extrabold text-sm text-foreground leading-tight truncate">LexoLehte AI</p>
+            <p className="font-extrabold text-sm text-foreground leading-tight truncate">MësoLehtë AI</p>
             <p className="text-xs text-muted-foreground font-medium">{t("nav.teacherSpace")}</p>
           </div>
         )}

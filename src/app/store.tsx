@@ -34,12 +34,12 @@ const AppContext = createContext<AppState>({
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
-    try { return JSON.parse(localStorage.getItem("lexolehte_user") ?? "null"); } catch { return null; }
+    try { return JSON.parse(localStorage.getItem("mesolehte_user") ?? "null"); } catch { return null; }
   });
 
   const [accessibility, setAccessibilityState] = useState<AccessibilitySettings>(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem("lexolehte_a11y") ?? "{}") as Partial<AccessibilitySettings>;
+      const saved = JSON.parse(localStorage.getItem("mesolehte_a11y") ?? "{}") as Partial<AccessibilitySettings>;
       return {
         ...defaults,
         ...saved,
@@ -54,18 +54,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback((u: User) => {
     setUser(u);
-    localStorage.setItem("lexolehte_user", JSON.stringify(u));
+    localStorage.setItem("mesolehte_user", JSON.stringify(u));
   }, []);
 
   const logout = useCallback(() => {
     setUser(null);
-    localStorage.removeItem("lexolehte_user");
+    localStorage.removeItem("mesolehte_user");
   }, []);
 
   const setAccessibility = useCallback((s: Partial<AccessibilitySettings>) => {
     setAccessibilityState(prev => {
       const next = { ...prev, ...s };
-      localStorage.setItem("lexolehte_a11y", JSON.stringify(next));
+      localStorage.setItem("mesolehte_a11y", JSON.stringify(next));
       return next;
     });
   }, []);

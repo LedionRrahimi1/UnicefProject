@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import {
   Upload, ChevronRight, ChevronLeft, Check, Wand2,
@@ -6,7 +6,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { materialService, aiService, learningService, studentService } from "./services";
-import { MOCK_CLASSES, MOCK_STUDENTS } from "./mockData";
+import { MOCK_CLASSES } from "./mockData";
+import { buildAdaptationCohorts } from "./adaptationCohorts";
+import type { Student } from "./types";
 import { useT } from "./useT";
 
 const AI_STEPS_BASE = [
@@ -24,6 +26,7 @@ export default function MaterialCreate() {
   const [step, setStep] = useState(0);
   const [processing, setProcessing] = useState(false);
   const [aiStepIdx, setAiStepIdx] = useState(-1);
+  const [variantProgress, setVariantProgress] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Step 1
@@ -35,6 +38,8 @@ export default function MaterialCreate() {
   const [audience, setAudience] = useState<"class" | "student">("class");
   const [selectedClass, setSelectedClass] = useState(MOCK_CLASSES[0].id);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [classStudents, setClassStudents] = useState<Student[]>([]);
+  const [personalizeByNeeds, setPersonalizeByNeeds] = useState(true);
 
   // Step 3
   const [title, setTitle] = useState("");
@@ -72,6 +77,16 @@ export default function MaterialCreate() {
     visualizations: t("mc.visuals"),
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    studentService.getByClass(selectedClass).then(list => {
+      if (cancelled) return;
+      setClassStudents(list);
+      setSelectedStudents(prev => prev.filter(id => list.some(s => s.id === id)));
+    });
+    return () => { cancelled = true; };
+  }, [selectedClass]);
+
   const handleFile = async (f: File) => {
     setFile(f);
     if (f.type.startsWith("text/") || /\.(txt|md|csv)$/i.test(f.name)) {
@@ -93,14 +108,21 @@ export default function MaterialCreate() {
     setSelectedStudents(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
   };
 
-  const classStudents = MOCK_STUDENTS.filter(s => {
-    const cls = MOCK_CLASSES.find(c => c.id === selectedClass);
-    return cls && s.class === cls.name.replace("Klasa ", "");
-  });
+  const clearStudentSelection = () => {
+    setSelectedStudents([]);
+  };
+
+  const targetStudentIds = useMemo(() => {
+    if (audience === "student" && selectedStudents.length > 0) return selectedStudents;
+    return classStudents.map(s => s.id);
+  }, [audience, selectedStudents, classStudents]);
 
   const canProceed = () => {
-    if (step === 0) return text.trim().length > 20 || file !== null;
-    if (step === 1) return audience === "class" || selectedStudents.length > 0;
+    if (step === 0) return text.trim().length > 0 || file !== null;
+    if (step === 1) {
+      if (audience === "class") return true;
+      return selectedStudents.length > 0;
+    }
     if (step === 2) return true;
     return true;
   };
@@ -125,6 +147,107 @@ export default function MaterialCreate() {
     setStep(s => s + 1);
   };
 
+  const createOneVariant = async (opts: {
+    sourceText: string;
+    finalTitle: string;
+    finalSubject: string;
+    className: string;
+    learnerHints: string[];
+    levelForCohort: number;
+    includeVisuals: boolean;
+    targetIds: string[];
+    adaptationGroupId: string;
+    adaptationKey?: string;
+    adaptationLabel?: string;
+  }) => {
+    const adapted = await aiService.adaptMaterial({
+      text: opts.sourceText,
+      title: opts.finalTitle,
+      subject: opts.finalSubject,
+      level: opts.levelForCohort,
+      length,
+      numQuestions: numQ,
+      includeSummary: switches.summary,
+      includeKeyPoints: switches.keyPoints,
+      includeVocab: switches.vocab,
+      includeQuiz: switches.quiz,
+      includeTeacherNotes: switches.teacherNotes,
+      includeTranslation: switches.translate,
+      includeVisualizations: opts.includeVisuals,
+      learnerHints: opts.learnerHints,
+    });
+
+    let illustrations: string[] = [];
+    if (opts.includeVisuals) {
+      const prompts =
+        adapted.visualPrompts && adapted.visualPrompts.length > 0
+          ? adapted.visualPrompts
+          : [
+              `Educational illustration about ${opts.finalTitle}. Subject: ${opts.finalSubject}. Key idea: ${adapted.summary || adapted.keyPoints?.[0] || adapted.simplifiedText.slice(0, 180)}`,
+            ];
+      try {
+        const url = await aiService.generateIllustration(prompts[0]);
+        illustrations.push(url);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Gjenerimi i figurës dështoi.";
+        toast.error(`Vizualizimet: ${message}`);
+      }
+    }
+
+    let englishText = "";
+    if (switches.translate) {
+      try {
+        englishText =
+          (adapted.translation && adapted.translation.length > 40
+            ? adapted.translation
+            : await aiService.translateText(adapted.simplifiedText, "en")
+          ).trim();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Përkthimi dështoi.";
+        toast.error(`Përkthimi: ${message}`);
+      }
+    }
+
+    const titleWithLabel = opts.adaptationLabel
+      ? `${opts.finalTitle} (${opts.adaptationLabel})`
+      : opts.finalTitle;
+
+    const mat = await materialService.create({
+      title: titleWithLabel,
+      subject: opts.finalSubject,
+      class: opts.className,
+      originalText: opts.sourceText,
+      simplifiedText: adapted.simplifiedText,
+      summary: adapted.summary,
+      keyPoints: adapted.keyPoints,
+      vocabulary: adapted.vocabulary,
+      quiz: adapted.quiz,
+      teacherNotes: adapted.teacherNotes,
+      englishText,
+      illustrations,
+      estimatedMinutes: Math.max(10, Math.round(adapted.simplifiedText.split(/\s+/).length / 120) * 5),
+      targetStudentIds: opts.targetIds,
+      adaptationGroupId: opts.adaptationGroupId,
+      adaptationKey: opts.adaptationKey,
+      adaptationLabel: opts.adaptationLabel,
+    });
+
+    try {
+      await aiService.generateFlashcards({
+        id: mat.id,
+        title: mat.title,
+        subject: mat.subject,
+        simplifiedText: mat.simplifiedText,
+        keyPoints: mat.keyPoints,
+        vocabulary: mat.vocabulary,
+      });
+    } catch {
+      // optional
+    }
+
+    return mat;
+  };
+
   const runAI = async () => {
     const finalTitle = resolveTitle();
     const finalSubject = resolveSubject();
@@ -137,127 +260,117 @@ export default function MaterialCreate() {
       return;
     }
 
+    const targets = targetStudentIds;
+    if (targets.length === 0) {
+      toast.error(t("mc.noStudents"));
+      return;
+    }
+
     setProcessing(true);
     setAiStepIdx(0);
+    setVariantProgress("");
 
     const progressTimer = window.setInterval(() => {
       setAiStepIdx(prev => (prev < AI_STEPS.length - 2 ? prev + 1 : prev));
     }, 1800);
 
-    try {
-      const targetStudentIds =
-        audience === "student" && selectedStudents.length > 0
-          ? selectedStudents
-          : classStudents.map(s => s.id);
+    const className =
+      MOCK_CLASSES.find(c => c.id === selectedClass)?.name.replace("Klasa ", "") ?? "VI-1";
+    const adaptationGroupId = `ag-${Date.now()}`;
 
-      const hintSet = new Set<string>();
-      for (const sid of targetStudentIds) {
+    try {
+      const profilesByStudentId = new Map<string, Awaited<ReturnType<typeof learningService.getProfile>>>();
+      const studentsForTargets: Student[] = [];
+      for (const sid of targets) {
         const [prof, stu] = await Promise.all([
           learningService.getProfile(sid),
           studentService.getById(sid),
         ]);
-        if (stu?.visualPreferred) {
-          hintSet.add(
-            "Mëson më mirë me figura dhe ilustrime — përfshi shembuj vizualë, përshkrime konkrete dhe gjuhë që lehtëson imagjinimin e koncepteve."
+        profilesByStudentId.set(sid, prof);
+        if (stu) studentsForTargets.push(stu);
+      }
+
+      let createdIds: string[] = [];
+
+      if (personalizeByNeeds && studentsForTargets.length > 0) {
+        const cohorts = buildAdaptationCohorts(studentsForTargets, profilesByStudentId);
+        for (let i = 0; i < cohorts.length; i++) {
+          const cohort = cohorts[i];
+          setVariantProgress(
+            t("mc.variantProgress", {
+              current: String(i + 1),
+              total: String(cohorts.length),
+              label: cohort.label,
+              n: String(cohort.studentIds.length),
+            })
           );
+          setAiStepIdx(0);
+
+          const levelForCohort = cohort.levelOverride ?? level;
+          const includeVisuals = switches.visualizations || cohort.forceVisuals;
+
+          const mat = await createOneVariant({
+            sourceText,
+            finalTitle,
+            finalSubject,
+            className,
+            learnerHints: cohort.learnerHints,
+            levelForCohort,
+            includeVisuals,
+            targetIds: cohort.studentIds,
+            adaptationGroupId,
+            adaptationKey: cohort.key,
+            adaptationLabel: cohort.label,
+          });
+          createdIds.push(mat.id);
         }
-        if (!prof) continue;
-        [...prof.preferredFormats, ...prof.supportNeeds, ...prof.teacherRecommendations]
-          .filter(Boolean)
-          .forEach(h => hintSet.add(h));
-      }
-      const learnerHints = Array.from(hintSet).slice(0, 12);
 
-      const adapted = await aiService.adaptMaterial({
-        text: sourceText,
-        title: finalTitle,
-        subject: finalSubject,
-        level,
-        length,
-        numQuestions: numQ,
-        includeSummary: switches.summary,
-        includeKeyPoints: switches.keyPoints,
-        includeVocab: switches.vocab,
-        includeQuiz: switches.quiz,
-        includeTeacherNotes: switches.teacherNotes,
-        includeTranslation: switches.translate,
-        includeVisualizations: switches.visualizations,
-        learnerHints,
-      });
-
-      let illustrations: string[] = [];
-      if (switches.visualizations) {
-        setAiStepIdx(Math.max(0, AI_STEPS.length - 2));
-        const prompts =
-          adapted.visualPrompts && adapted.visualPrompts.length > 0
-            ? adapted.visualPrompts
-            : [
-                `Educational illustration about ${finalTitle}. Subject: ${finalSubject}. Key idea: ${adapted.summary || adapted.keyPoints?.[0] || adapted.simplifiedText.slice(0, 180)}`,
-              ];
-        // One figure during create (localStorage quota); more can be added on demand in reading/quiz
-        const prompt = prompts[0];
-        try {
-          const url = await aiService.generateIllustration(prompt);
-          illustrations.push(url);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : "Gjenerimi i figurës dështoi.";
-          toast.error(`Vizualizimet: ${message}`);
+        window.clearInterval(progressTimer);
+        setAiStepIdx(AI_STEPS.length - 1);
+        toast.success(t("mc.successVariants", { n: String(createdIds.length) }));
+        await new Promise(r => setTimeout(r, 400));
+        navigate(`/teacher/materials/${createdIds[0]}/review`);
+      } else {
+        // Single shared adaptation (legacy behaviour) — still only assign selected targets
+        const hintSet = new Set<string>();
+        for (const sid of targets) {
+          const stu = studentsForTargets.find(s => s.id === sid);
+          const prof = profilesByStudentId.get(sid);
+          if (stu?.visualPreferred) {
+            hintSet.add(
+              "Mëson më mirë me figura dhe ilustrime — përfshi shembuj vizualë, përshkrime konkrete dhe gjuhë që lehtëson imagjinimin e koncepteve."
+            );
+          }
+          if (!prof) continue;
+          [...prof.preferredFormats, ...prof.supportNeeds, ...prof.teacherRecommendations]
+            .filter(Boolean)
+            .forEach(h => hintSet.add(h));
         }
-      }
 
-      let englishText = "";
-      if (switches.translate) {
-        try {
-          englishText =
-            (adapted.translation && adapted.translation.length > 40
-              ? adapted.translation
-              : await aiService.translateText(adapted.simplifiedText, "en")
-            ).trim();
-        } catch (err) {
-          const message = err instanceof Error ? err.message : "Përkthimi dështoi.";
-          toast.error(`Përkthimi: ${message}`);
-        }
-      }
-
-      window.clearInterval(progressTimer);
-      setAiStepIdx(AI_STEPS.length - 1);
-
-      const mat = await materialService.create({
-        title: finalTitle,
-        subject: finalSubject,
-        class: MOCK_CLASSES.find(c => c.id === selectedClass)?.name.replace("Klasa ", "") ?? "VI-1",
-        originalText: sourceText,
-        simplifiedText: adapted.simplifiedText,
-        summary: adapted.summary,
-        keyPoints: adapted.keyPoints,
-        vocabulary: adapted.vocabulary,
-        quiz: adapted.quiz,
-        teacherNotes: adapted.teacherNotes,
-        englishText,
-        illustrations,
-        estimatedMinutes: Math.max(10, Math.round(adapted.simplifiedText.split(/\s+/).length / 120) * 5),
-      });
-
-      try {
-        await aiService.generateFlashcards({
-          id: mat.id,
-          title: mat.title,
-          subject: mat.subject,
-          simplifiedText: mat.simplifiedText,
-          keyPoints: mat.keyPoints,
-          vocabulary: mat.vocabulary,
+        const mat = await createOneVariant({
+          sourceText,
+          finalTitle,
+          finalSubject,
+          className,
+          learnerHints: Array.from(hintSet).slice(0, 12),
+          levelForCohort: level,
+          includeVisuals: switches.visualizations,
+          targetIds: targets,
+          adaptationGroupId,
         });
-      } catch {
-        // Flashcards are optional; material still succeeds
-      }
+        createdIds = [mat.id];
 
-      toast.success(t("mc.success"));
-      await new Promise(r => setTimeout(r, 500));
-      navigate(`/teacher/materials/${mat.id}/review`);
+        window.clearInterval(progressTimer);
+        setAiStepIdx(AI_STEPS.length - 1);
+        toast.success(t("mc.success"));
+        await new Promise(r => setTimeout(r, 500));
+        navigate(`/teacher/materials/${mat.id}/review`);
+      }
     } catch (err) {
       window.clearInterval(progressTimer);
       setProcessing(false);
       setAiStepIdx(-1);
+      setVariantProgress("");
       const message = err instanceof Error ? err.message : "Diçka shkoi keq me AI.";
       toast.error(message);
     }
@@ -301,7 +414,7 @@ export default function MaterialCreate() {
 
             {inputMode === "text" ? (
               <textarea value={text} onChange={e => setText(e.target.value)} rows={8}
-                placeholder="Ngjit ose shkruaj tekstin mësimor këtu... (minimum 20 karaktere)"
+                placeholder="Ngjit ose shkruaj tekstin mësimor këtu..."
                 className="w-full bg-input-background border border-border rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all text-foreground placeholder:text-muted-foreground resize-none"
                 aria-label="Teksti mësimor" />
             ) : (
@@ -337,8 +450,17 @@ export default function MaterialCreate() {
             <h2 className="font-semibold text-lg">{t("mc.stepAudience")}</h2>
             <div className="grid grid-cols-2 gap-3">
               {[{ id: "class", label: t("mc.wholeClass") }, { id: "student", label: t("mc.selectedStudents") }].map(opt => (
-                <button key={opt.id} onClick={() => setAudience(opt.id as "class" | "student")}
-                  className={`py-3 rounded-xl text-sm font-medium border-2 transition-colors ${audience === opt.id ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/30"}`}>
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    const next = opt.id as "class" | "student";
+                    setAudience(next);
+                    if (next === "class") setSelectedStudents([]);
+                    else setSelectedStudents([]); // start empty — teacher picks manually
+                  }}
+                  className={`py-3 rounded-xl text-sm font-medium border-2 transition-colors ${audience === opt.id ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/30"}`}
+                >
                   {opt.label}
                 </button>
               ))}
@@ -352,21 +474,84 @@ export default function MaterialCreate() {
               </select>
             </div>
 
-            {audience === "student" && (
-              <div>
-                <label className="text-sm font-medium mb-2 block">{t("mc.selectStudents")}</label>
-                <div className="space-y-2">
-                  {classStudents.map(s => (
-                    <label key={s.id} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${selectedStudents.includes(s.id) ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"}`}>
-                      <input type="checkbox" checked={selectedStudents.includes(s.id)} onChange={() => toggleStudent(s.id)} className="accent-primary w-4 h-4" />
-                      <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">{s.name[0]}</div>
-                      <span className="text-sm font-medium">{s.name}</span>
-                      <span className="ml-auto text-xs text-muted-foreground">{s.readingLevel}</span>
-                    </label>
-                  ))}
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={personalizeByNeeds}
+                onChange={e => setPersonalizeByNeeds(e.target.checked)}
+                className="accent-primary w-4 h-4 shrink-0"
+              />
+              <span className="text-sm text-muted-foreground">{t("mc.personalizeTitle")}</span>
+            </label>
+
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                <label className="text-sm font-medium">{t("mc.selectStudents")}</label>
+                <div className="flex items-center gap-2">
+                  {audience === "class" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAudience("student");
+                        clearStudentSelection();
+                      }}
+                      className="text-xs font-semibold text-primary hover:underline"
+                    >
+                      {t("mc.deselectAll")}
+                    </button>
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    {t("mc.studentsCount", { n: targetStudentIds.length })}
+                  </span>
                 </div>
               </div>
-            )}
+
+              {audience === "class" && (
+                <p className="text-xs text-muted-foreground mb-2">{t("mc.classMeansAll")}</p>
+              )}
+
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {classStudents.map(s => {
+                  const checked =
+                    audience === "class" ? true : selectedStudents.includes(s.id);
+                  return (
+                    <label
+                      key={s.id}
+                      className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${
+                        checked ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          if (audience === "class") {
+                            setAudience("student");
+                            setSelectedStudents(classStudents.map(x => x.id).filter(id => id !== s.id));
+                            return;
+                          }
+                          toggleStudent(s.id);
+                        }}
+                        className="accent-primary w-4 h-4"
+                      />
+                      <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">{s.name[0]}</div>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-sm font-medium block truncate">{s.name}</span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {s.visualPreferred ? "Vizual · " : ""}
+                          {s.audioEnabled ? "Audio · " : ""}
+                          {s.readingLevel}
+                        </span>
+                      </div>
+                      <span className="ml-auto text-xs text-muted-foreground shrink-0">{s.readingLevel}</span>
+                    </label>
+                  );
+                })}
+                {classStudents.length === 0 && (
+                  <p className="text-sm text-muted-foreground py-4 text-center">{t("mc.noStudents")}</p>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -396,6 +581,9 @@ export default function MaterialCreate() {
                   </button>
                 ))}
               </div>
+              {personalizeByNeeds && (
+                <p className="text-xs text-muted-foreground mt-2">{t("mc.levelMayVary")}</p>
+              )}
             </div>
 
             <div>
@@ -444,7 +632,20 @@ export default function MaterialCreate() {
               <div className="flex justify-between"><span className="text-muted-foreground">{t("mc.subjectLabel")}</span><span className="font-medium">{subject}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">{t("mc.simpLabel")}</span><span className="font-medium">{simplificationLabels[level - 1]}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">{t("mc.questionsLabel")}</span><span className="font-medium">{numQ}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">{t("mc.audienceLabel")}</span><span className="font-medium">{audience === "class" ? MOCK_CLASSES.find(c => c.id === selectedClass)?.name : t("mc.studentsCount", { n: selectedStudents.length })}</span></div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground shrink-0">{t("mc.audienceLabel")}</span>
+                <span className="font-medium text-right">
+                  {audience === "class" && selectedStudents.length === 0
+                    ? MOCK_CLASSES.find(c => c.id === selectedClass)?.name
+                    : t("mc.studentsCount", { n: targetStudentIds.length })}
+                </span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground shrink-0">{t("mc.modeLabel")}</span>
+                <span className="font-medium text-right">
+                  {personalizeByNeeds ? t("mc.modePersonalized") : t("mc.modeShared")}
+                </span>
+              </div>
             </div>
           </div>
         )}
@@ -457,6 +658,9 @@ export default function MaterialCreate() {
             <div>
               <h2 className="font-semibold text-lg mb-1">{t("mc.processing")}</h2>
               <p className="text-sm text-muted-foreground">{t("mc.wait")}</p>
+              {variantProgress && (
+                <p className="text-sm font-semibold text-primary mt-2">{variantProgress}</p>
+              )}
             </div>
             <div className="space-y-2 max-w-xs mx-auto">
               {AI_STEPS.map((s, i) => (
@@ -487,7 +691,7 @@ export default function MaterialCreate() {
           ) : (
             <button type="button" onClick={runAI}
               className="flex items-center gap-2 bg-primary text-primary-foreground font-semibold px-6 py-2.5 rounded-xl hover:bg-primary/90 transition-colors shadow-lg shadow-primary/25">
-              <Wand2 size={16} /> {t("mc.adaptAI")}
+              <Wand2 size={16} /> {personalizeByNeeds ? t("mc.adaptAll") : t("mc.adaptAI")}
             </button>
           )}
         </div>

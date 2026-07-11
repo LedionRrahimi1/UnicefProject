@@ -199,11 +199,19 @@ export default function MaterialReview() {
             <ChevronLeft size={14} /> {t("tm.title")}
           </button>
           <h1 className="text-2xl font-bold">{material.title}</h1>
-          <div className="flex items-center gap-3 mt-1">
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className="text-sm text-muted-foreground">{material.subject} · {t("common.class")} {material.class}</span>
             <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${statusColors[material.status]}`}>
               {statusLabels[material.status]}
             </span>
+            {material.adaptationLabel && (
+              <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-primary/10 text-primary">
+                {material.adaptationLabel}
+                {material.targetStudentIds?.length
+                  ? ` · ${material.targetStudentIds.length} nxënës`
+                  : ""}
+              </span>
+            )}
           </div>
         </div>
 

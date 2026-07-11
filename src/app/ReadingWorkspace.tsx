@@ -398,7 +398,7 @@ export default function ReadingWorkspace() {
   };
 
   return (
-    <div className="flex flex-col h-full relative">
+    <div className="relative pb-4">
       {/* Top bar */}
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
@@ -424,11 +424,11 @@ export default function ReadingWorkspace() {
         </div>
       </div>
 
-      <div className="flex gap-5 flex-1 min-h-0">
-        {/* Main reading area */}
-        <div className="flex-1 min-w-0 flex flex-col">
+      <div className="flex gap-5 items-start">
+        {/* Main reading area — natural height, page scrolls */}
+        <div className="flex-1 min-w-0 space-y-4">
           {/* Reading toolbar */}
-          <div className="bg-card border border-border rounded-2xl p-3 mb-4 flex items-center gap-2 flex-wrap">
+          <div className="bg-card border border-border rounded-2xl p-3 flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1">
               <button onClick={() => setFontSize(f => Math.max(14, f - 2))} className="p-1.5 rounded-lg hover:bg-muted transition-colors" aria-label="Zvogëlo tekstin">
                 <ZoomOut size={14} />
@@ -488,15 +488,15 @@ export default function ReadingWorkspace() {
           </div>
 
           {visualMode && (
-            <div className="flex items-center gap-2 text-xs font-semibold text-primary bg-primary/10 rounded-2xl px-4 py-2.5 mb-4">
+            <div className="flex items-center gap-2 text-xs font-semibold text-primary bg-primary/10 rounded-2xl px-4 py-2.5">
               <ImageIcon size={14} /> {t("rw.visualMode")}
             </div>
           )}
 
           {(visualLoading || visualImage) && (
-            <div className="mb-4 rounded-2xl overflow-hidden border border-border bg-muted/40 flex items-center justify-center">
+            <div className="rounded-2xl overflow-hidden border border-border bg-white dark:bg-muted/40">
               {visualLoading && !visualImage && (
-                <div className="flex flex-col items-center gap-2 py-10 text-muted-foreground">
+                <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
                   <Loader2 size={22} className="animate-spin text-primary" />
                   <span className="text-xs font-semibold">{t("rw.creatingImage")}</span>
                 </div>
@@ -505,7 +505,7 @@ export default function ReadingWorkspace() {
                 <img
                   src={visualImage}
                   alt={`Ilustrim për: ${material.title}`}
-                  className="w-full max-h-64 object-contain bg-white"
+                  className="w-full h-auto max-h-[420px] object-contain mx-auto block"
                 />
               )}
             </div>
@@ -513,20 +513,20 @@ export default function ReadingWorkspace() {
 
           {/* Focus mode */}
           {focusMode ? (
-            <div className="flex-1 bg-card border border-border rounded-2xl p-8 flex flex-col">
+            <div className="bg-card border border-border rounded-2xl p-8 flex flex-col min-h-[280px]">
               <p className="text-xs text-muted-foreground text-center mb-4">{t("rw.paraOf", { n: currentPara + 1, total: paragraphs.length })}</p>
-              <div className="flex-1 flex items-center">
+              <div className="flex-1 flex items-center py-6">
                 <p className="text-center leading-loose text-foreground mx-auto max-w-prose"
                   style={{ fontSize, lineHeight: lineSpacing, fontFamily }}>
                   {paragraphs[currentPara]}
                 </p>
               </div>
-              <div className="flex items-center justify-center gap-4 mt-6">
+              <div className="flex items-center justify-center gap-4 mt-6 flex-wrap">
                 <button onClick={() => setCurrentPara(p => Math.max(0, p - 1))} disabled={currentPara === 0}
                   className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl border border-border text-sm hover:bg-muted transition-colors disabled:opacity-40">
                   <ChevronLeft size={16} /> {t("rw.prevPara")}
                 </button>
-                <div className="flex gap-1.5">
+                <div className="flex gap-1.5 flex-wrap justify-center">
                   {paragraphs.map((_, i) => (
                     <button key={i} onClick={() => setCurrentPara(i)}
                       className={`w-2 h-2 rounded-full transition-all ${i === currentPara ? "bg-primary w-4" : "bg-muted hover:bg-muted-foreground/30"}`}
@@ -540,7 +540,7 @@ export default function ReadingWorkspace() {
               </div>
             </div>
           ) : (
-            <div className="flex-1 bg-card border border-border rounded-2xl p-6 sm:p-8 overflow-y-auto"
+            <div className="bg-card border border-border rounded-2xl p-6 sm:p-8"
               onMouseUp={handleTextSelect}>
               <h1 className="text-2xl font-bold mb-6">
                 {material.title}
@@ -623,7 +623,7 @@ export default function ReadingWorkspace() {
           )}
 
           {explainResult && (
-            <div className="mt-4 ai-bubble">
+            <div className="ai-bubble">
               <div className="flex justify-between items-start gap-3">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-wide text-primary mb-2">{t("rw.aiHelp")}</p>
@@ -637,16 +637,18 @@ export default function ReadingWorkspace() {
           )}
 
           {/* Audio player */}
-          <div className="mt-4 bg-card border border-border p-4 rounded-2xl">
+          <div className="bg-card border border-border p-4 rounded-2xl">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
               <Headphones size={12} />
               {audioLoading
-                ? "Duke gjeneruar zërin në shqip... (disa sekonda)"
-                : "Dëgjo tekstin me zë në shqip. Mund të ndryshosh volumin dhe shpejtësinë."}
+                ? "Duke gjeneruar zërin... (disa sekonda)"
+                : readLang === "en"
+                  ? "Listen to the text in English. Adjust volume and speed."
+                  : "Dëgjo tekstin me zë në shqip. Mund të ndryshosh volumin dhe shpejtësinë."}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <button type="button" onClick={togglePlay} disabled={audioLoading}
-                className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-colors disabled:opacity-60" aria-label={playing ? t("rw.stop") : t("rw.listen")}>
+                className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-colors disabled:opacity-60 shrink-0" aria-label={playing ? t("rw.stop") : t("rw.listen")}>
                 {audioLoading ? (
                   <span className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
                 ) : playing ? <Pause size={18} /> : <Play size={18} />}
@@ -654,7 +656,7 @@ export default function ReadingWorkspace() {
               <button type="button" onClick={skipBack} disabled={audioLoading || !audioReady} className="p-2 rounded-lg hover:bg-muted disabled:opacity-40" aria-label="Pjesa e mëparshme">
                 <SkipBack size={16} />
               </button>
-              <div className="flex-1 h-1.5 bg-muted rounded-full relative overflow-hidden">
+              <div className="flex-1 min-w-[120px] h-1.5 bg-muted rounded-full relative overflow-hidden">
                 <div className="absolute inset-y-0 left-0 bg-primary rounded-full transition-all" style={{ width: `${audioProgress}%` }} />
               </div>
               <button type="button" onClick={skipForward} disabled={audioLoading || !audioReady} className="p-2 rounded-lg hover:bg-muted disabled:opacity-40" aria-label="Pjesa e radhës">
@@ -677,7 +679,7 @@ export default function ReadingWorkspace() {
           </div>
 
           {/* Start quiz CTA */}
-          <div className="mt-4 bg-secondary border border-primary/15 rounded-2xl p-5 flex items-center justify-between gap-3 shadow-sm">
+          <div className="bg-secondary border border-primary/15 rounded-2xl p-5 flex items-center justify-between gap-3 shadow-sm flex-wrap">
             <div>
               <p className="font-semibold text-secondary-foreground">{t("rw.readyQuiz")}</p>
               <p className="text-xs text-muted-foreground mt-0.5">{t("rw.quizMeta", { n: material.quiz.length })}</p>
@@ -691,10 +693,10 @@ export default function ReadingWorkspace() {
 
         {/* Sidebar */}
         {sidebarOpen && (
-          <div className="w-72 shrink-0 hidden lg:block">
-            <div className="bg-card border border-border rounded-2xl overflow-hidden h-full">
-              <Tabs.Root defaultValue="summary">
-                <Tabs.List className="flex border-b border-border bg-muted/30" aria-label="Informacion shtesë">
+          <div className="w-72 shrink-0 hidden lg:block sticky top-4">
+            <div className="bg-card border border-border rounded-2xl overflow-hidden max-h-[calc(100vh-6rem)] flex flex-col">
+              <Tabs.Root defaultValue="summary" className="flex flex-col min-h-0">
+                <Tabs.List className="flex border-b border-border bg-muted/30 shrink-0" aria-label="Informacion shtesë">
                   {[
                     { id: "summary", icon: BookOpen, label: t("rw.summary") },
                     { id: "keypoints", icon: List, label: t("rw.keyPoints") },
@@ -706,7 +708,7 @@ export default function ReadingWorkspace() {
                     </Tabs.Trigger>
                   ))}
                 </Tabs.List>
-                <div className="p-4 overflow-y-auto" style={{ maxHeight: "calc(100% - 52px)" }}>
+                <div className="p-4 overflow-y-auto">
                   <Tabs.Content value="summary">
                     <p className="text-sm leading-relaxed text-foreground">{material.summary}</p>
                   </Tabs.Content>

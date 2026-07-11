@@ -16,14 +16,14 @@ import type {
 } from "./types";
 
 const KEYS = {
-  materials: "lexolehte_materials_v2",
-  assignments: "lexolehte_assignments_v1",
-  students: "lexolehte_students_v2",
-  classes: "lexolehte_classes_v1",
-  profiles: "lexolehte_learning_profiles_v1",
-  reports: "lexolehte_learning_reports_v1",
-  flashcards: "lexolehte_flashcards_v1",
-  memoryBoosters: "lexolehte_memory_boosters_v1",
+  materials: "mesolehte_materials_v2",
+  assignments: "mesolehte_assignments_v1",
+  students: "mesolehte_students_v2",
+  classes: "mesolehte_classes_v1",
+  profiles: "mesolehte_learning_profiles_v1",
+  reports: "mesolehte_learning_reports_v1",
+  flashcards: "mesolehte_flashcards_v1",
+  memoryBoosters: "mesolehte_memory_boosters_v1",
 } as const;
 
 function load<T>(key: string, fallback: T): T {
@@ -105,11 +105,18 @@ export function studentsInClass(className: string): Student[] {
 }
 
 /**
- * When a material is published, create one pending assignment
- * for every student in that material's class (if missing).
+ * When a material is published, create pending assignments.
+ * If material.targetStudentIds is set, only those students get it
+ * (used for personalized adaptation variants). Otherwise: whole class.
  */
 export function publishMaterialToStudents(material: Material): Assignment[] {
-  const students = studentsInClass(material.class);
+  const classStudents = studentsInClass(material.class);
+  const targetIds = material.targetStudentIds?.filter(Boolean);
+  const students =
+    targetIds && targetIds.length > 0
+      ? classStudents.filter(s => targetIds.includes(s.id))
+      : classStudents;
+
   const existing = getAssignments();
   const today = new Date().toISOString().split("T")[0];
   const deadline = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];

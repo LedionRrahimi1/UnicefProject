@@ -42,9 +42,9 @@ export default function Login() {
         <div className="relative z-10 flex flex-col h-full">
           <Link to="/" className="flex items-center gap-3 mb-14">
             <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center">
-              <span className="text-white font-extrabold text-xl">L</span>
+              <span className="text-white font-extrabold text-xl">M</span>
             </div>
-            <span className="font-extrabold text-xl tracking-tight">LexoLehtë AI</span>
+            <span className="font-extrabold text-xl tracking-tight">MësoLehtë AI</span>
           </Link>
 
           <div className="flex-1 flex flex-col justify-center">
@@ -95,21 +95,21 @@ export default function Login() {
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex items-center gap-2.5 mb-8">
             <div className="w-9 h-9 rounded-2xl bg-primary flex items-center justify-center">
-              <span className="text-white font-extrabold text-sm">L</span>
+              <span className="text-white font-extrabold text-sm">M</span>
             </div>
-            <span className="font-extrabold">LexoLehtë AI</span>
+            <span className="font-extrabold">MësoLehtë AI</span>
           </div>
 
           <h2 className="text-2xl sm:text-3xl font-extrabold text-foreground mb-2 tracking-tight">{t("login.title")}</h2>
           <p className="text-muted-foreground text-sm mb-8">{t("login.subtitle")}</p>
 
           <div className="grid grid-cols-2 gap-3 mb-6">
-            <button onClick={() => doLogin("mesuesi@lexolehte.com", "demo123")} disabled={loading}
+            <button onClick={() => doLogin("mesuesi@mesolehte.com", "demo123")} disabled={loading}
               className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-primary/20 bg-primary/5 hover:bg-primary/10 hover:border-primary/40 transition-all text-sm font-bold text-primary min-h-[5.5rem]">
               <GraduationCap size={22} />
               {t("login.asTeacher")}
             </button>
-            <button onClick={() => doLogin("nxenesi@lexolehte.com", "demo123")} disabled={loading}
+            <button onClick={() => doLogin("nxenesi@mesolehte.com", "demo123")} disabled={loading}
               className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-success/25 bg-success-muted hover:border-success/40 transition-all text-sm font-bold text-success-muted-foreground min-h-[5.5rem]">
               <User size={22} />
               {t("login.asStudent")}
@@ -166,8 +166,8 @@ export default function Login() {
           </form>
 
           <div className="mt-6 p-4 bg-muted/80 rounded-2xl text-xs text-muted-foreground space-y-1 border border-border">
-            <p><span className="font-bold text-foreground">{t("login.demoTeacher")}</span> mesuesi@lexolehte.com · demo123</p>
-            <p><span className="font-bold text-foreground">{t("login.demoStudent")}</span> nxenesi@lexolehte.com · demo123</p>
+            <p><span className="font-bold text-foreground">{t("login.demoTeacher")}</span> mesuesi@mesolehte.com · demo123</p>
+            <p><span className="font-bold text-foreground">{t("login.demoStudent")}</span> nxenesi@mesolehte.com · demo123</p>
           </div>
         </div>
       </div>

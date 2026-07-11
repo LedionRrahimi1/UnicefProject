@@ -52,6 +52,17 @@ export interface Material {
   studentCount: number;
   completionRate: number;
   estimatedMinutes: number;
+  /**
+   * If set, publish assigns only these students (personalized variants).
+   * If empty/undefined, publish assigns the whole class.
+   */
+  targetStudentIds?: string[];
+  /** Shared id for all variants generated from one source in one batch. */
+  adaptationGroupId?: string;
+  /** Machine key for the preference cohort (e.g. visual-basic). */
+  adaptationKey?: string;
+  /** Label shown to the teacher (e.g. "Vizual · Bazik"). */
+  adaptationLabel?: string;
 }
 
 export interface Student {

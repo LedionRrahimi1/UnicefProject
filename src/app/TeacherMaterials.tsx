@@ -109,6 +109,9 @@ export default function TeacherMaterials() {
                 <div className="flex-1 min-w-0 mr-3">
                   <h3 className="font-semibold text-foreground truncate">{m.title}</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">{m.subject} · {t("common.class")} {m.class}</p>
+                  {m.adaptationLabel && (
+                    <p className="text-[11px] font-semibold text-primary mt-1">{m.adaptationLabel}</p>
+                  )}
                 </div>
                 <span className={`text-xs px-2.5 py-1 rounded-full font-medium shrink-0 ${statusColors[m.status]}`}>
                   {statusLabels[m.status]}

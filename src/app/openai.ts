@@ -91,7 +91,7 @@ const levelGuide: Record<number, string> = {
 };
 
 export async function adaptMaterialWithAI(opts: AdaptMaterialOptions): Promise<AdaptedMaterial> {
-  const system = `Je një asistent pedagogjik për platformën LexoLehtë AI në Shqipëri/Kosovë.
+  const system = `Je një asistent pedagogjik për platformën MësoLehtë AI në Shqipëri/Kosovë.
 Përgjigju GJITHMONË në shqip.
 Kthen VETËM JSON të vlefshëm sipas skemës së kërkuar.
 Mos shto markdown, komente apo tekst jashtë JSON.`;
