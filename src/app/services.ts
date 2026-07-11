@@ -11,17 +11,42 @@ import {
   explainWordWithAI,
   translateWithAI,
   synthesizeAlbanianSpeech,
+  synthesizeEnglishSpeech,
   chunkTextForTTS,
+  generateEducationalIllustration,
   type AdaptMaterialOptions,
   type AdaptedMaterial,
 } from "./openai";
 import {
+  generatePostLessonIntelligence,
+  generateFlashcardsFromMaterial,
+  explainWrongAnswerWithAI,
+  generateEasierQuestionWithAI,
+} from "./openaiLearning";
+import {
   getMaterials, setMaterials,
   getAssignments, setAssignments,
-  getStudents, getClasses,
+  getStudents, setStudents, getClasses, setClasses,
   normalizeClassName, studentsInClass,
   publishMaterialToStudents,
+  getLearningProfile, upsertLearningProfile,
+  addLearningReport, getReportByAssignment, getReportsForStudent,
+  upsertFlashcardsForMaterial, getFlashcardsForMaterial,
+  addMemoryBooster, getMemoryBoosterByAssignment, getMemoryBoostersForStudent,
 } from "./localDb";
+import {
+  countEvents,
+  getSessionMinutes,
+  clearSessionStart,
+} from "./learningTracker";
+import type {
+  LearningProfile,
+  LearningReport,
+  Flashcard,
+  MemoryBoosterPack,
+  SessionMetrics,
+  WrongQuestionDetail,
+} from "./types";
 
 export type { AdaptMaterialOptions, AdaptedMaterial };
 
@@ -67,6 +92,8 @@ export const materialService = {
       vocabulary: data.vocabulary ?? [],
       quiz: data.quiz ?? [],
       teacherNotes: data.teacherNotes ?? "",
+      englishText: data.englishText ?? "",
+      illustrations: data.illustrations ?? [],
       status: "draft",
       createdAt: new Date().toISOString().split("T")[0],
       studentCount: 0,
@@ -125,6 +152,55 @@ export const studentService = {
     if (!cls) return [];
     return studentsInClass(cls.name);
   },
+  async create(input: {
+    name: string;
+    class: string;
+    age: number;
+    readingLevel?: string;
+    audioEnabled?: boolean;
+    visualPreferred?: boolean;
+  }): Promise<Student> {
+    await delay(200);
+    const name = input.name.trim();
+    if (!name) throw new Error("Emri i nxënësit është i detyrueshëm.");
+    if (!input.class.trim()) throw new Error("Zgjidh klasën.");
+    if (!input.age || input.age < 5 || input.age > 20) throw new Error("Mosha duhet të jetë midis 5 dhe 20.");
+
+    const student: Student = {
+      id: `stu-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name,
+      class: normalizeClassName(input.class),
+      age: input.age,
+      readingLevel: input.readingLevel || "Mesatar",
+      score: 0,
+      completedMaterials: 0,
+      status: "active",
+      preferredFont: "lexend",
+      audioEnabled: input.audioEnabled ?? true,
+      visualPreferred: input.visualPreferred ?? false,
+      language: "sq",
+    };
+    setStudents([student, ...getStudents()]);
+
+    // Keep class studentCount in sync
+    setClasses(getClasses().map(c => {
+      if (normalizeClassName(c.name) !== normalizeClassName(input.class)) return c;
+      return { ...c, studentCount: studentsInClass(c.name).length };
+    }));
+
+    return student;
+  },
+  async update(id: string, patch: Partial<Student>): Promise<Student | undefined> {
+    await delay(150);
+    const all = getStudents();
+    const idx = all.findIndex(s => s.id === id);
+    if (idx < 0) return undefined;
+    const updated = { ...all[idx], ...patch, id };
+    const next = [...all];
+    next[idx] = updated;
+    setStudents(next);
+    return updated;
+  },
   async getClasses(): Promise<ClassGroup[]> {
     await delay(200);
     const classes = getClasses();
@@ -180,7 +256,13 @@ export const assignmentService = {
       a.id === id && a.status === "pending" ? { ...a, status: "in-progress" as const } : a
     ));
   },
-  async complete(id: string, score: number, wordsOpened: number, audioUsed: boolean): Promise<void> {
+  async complete(
+    id: string,
+    score: number,
+    wordsOpened: number,
+    audioUsed: boolean,
+    extras?: { timeSpentMinutes?: number }
+  ): Promise<void> {
     await delay(200);
     setAssignments(getAssignments().map(a =>
       a.id === id ? {
@@ -191,6 +273,7 @@ export const assignmentService = {
         wordsOpened,
         audioUsed,
         attempts: (a.attempts ?? 0) + 1,
+        ...(extras?.timeSpentMinutes != null ? { timeSpentMinutes: extras.timeSpentMinutes } : {}),
       } : a
     ));
 
@@ -298,19 +381,239 @@ export const aiService = {
     return result.teacherNotes;
   },
 
-  async generateAudio(text: string): Promise<string> {
-    const blob = await synthesizeAlbanianSpeech(text);
+  async generateAudio(text: string, lang: "sq" | "en" = "sq"): Promise<string> {
+    const blob = lang === "en"
+      ? await synthesizeEnglishSpeech(text)
+      : await synthesizeAlbanianSpeech(text);
     return URL.createObjectURL(blob);
   },
 
-  async generateAudioChunks(text: string): Promise<string[]> {
+  async generateAudioChunks(text: string, lang: "sq" | "en" = "sq"): Promise<string[]> {
     const parts = chunkTextForTTS(text);
     const urls: string[] = [];
     for (const part of parts) {
-      const blob = await synthesizeAlbanianSpeech(part);
+      const blob = lang === "en"
+        ? await synthesizeEnglishSpeech(part)
+        : await synthesizeAlbanianSpeech(part);
       urls.push(URL.createObjectURL(blob));
     }
     return urls;
+  },
+
+  async generateIllustration(prompt: string): Promise<string> {
+    return generateEducationalIllustration(prompt);
+  },
+
+  async generateFlashcards(material: {
+    id: string;
+    title: string;
+    subject: string;
+    simplifiedText: string;
+    keyPoints?: string[];
+    vocabulary?: { word: string; definition: string }[];
+  }): Promise<Flashcard[]> {
+    const raw = await generateFlashcardsFromMaterial({
+      title: material.title,
+      subject: material.subject,
+      text: material.simplifiedText,
+      keyPoints: material.keyPoints,
+      vocabulary: material.vocabulary,
+    });
+    const cards: Flashcard[] = raw.map((c, i) => ({
+      id: `fc-${material.id}-${i}-${Date.now()}`,
+      materialId: material.id,
+      front: c.front,
+      back: c.back,
+      type: c.type,
+    }));
+    upsertFlashcardsForMaterial(material.id, cards);
+    return cards;
+  },
+
+  async explainWrongAnswer(input: {
+    question: string;
+    studentAnswer: string;
+    correctAnswer: string;
+    topic: string;
+    visualPreferred?: boolean;
+  }) {
+    return explainWrongAnswerWithAI(input);
+  },
+
+  async generateEasierQuestion(input: {
+    original: QuizQuestion;
+    topic: string;
+    subject: string;
+    visualPreferred?: boolean;
+  }): Promise<QuizQuestion> {
+    return generateEasierQuestionWithAI(input);
+  },
+};
+
+// ── Learning intelligence (reports, profile, memory booster) ──────────────────
+
+function isoPlusDays(days: number): string {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+}
+
+export const learningService = {
+  async getProfile(studentId: string): Promise<LearningProfile | undefined> {
+    await delay(80);
+    return getLearningProfile(studentId);
+  },
+
+  async getReportsForStudent(studentId: string): Promise<LearningReport[]> {
+    await delay(80);
+    return getReportsForStudent(studentId);
+  },
+
+  async getReportByAssignment(assignmentId: string): Promise<LearningReport | undefined> {
+    await delay(80);
+    return getReportByAssignment(assignmentId);
+  },
+
+  async getFlashcards(materialId: string): Promise<Flashcard[]> {
+    await delay(80);
+    return getFlashcardsForMaterial(materialId);
+  },
+
+  async getMemoryBoosters(studentId: string): Promise<MemoryBoosterPack[]> {
+    await delay(80);
+    return getMemoryBoostersForStudent(studentId);
+  },
+
+  async getMemoryBoosterByAssignment(assignmentId: string): Promise<MemoryBoosterPack | undefined> {
+    await delay(80);
+    return getMemoryBoosterByAssignment(assignmentId);
+  },
+
+  /** Build metrics from tracked events + quiz outcome, then run AI pipeline. */
+  async runPostLessonAnalysis(input: {
+    studentId: string;
+    materialId: string;
+    assignmentId: string;
+    score: number;
+    attempts: number;
+    wrongQuestions: WrongQuestionDetail[];
+    hintCount: number;
+  }): Promise<{ report: LearningReport; profile: LearningProfile; booster: MemoryBoosterPack }> {
+    const material = getMaterials().find(m => m.id === input.materialId);
+    const explainCount = countEvents(input.studentId, input.materialId, "explain");
+    const audioPlayCount = countEvents(input.studentId, input.materialId, "audio");
+    const vocabOpened = countEvents(input.studentId, input.materialId, "vocab");
+    const simplifiedUsed = countEvents(input.studentId, input.materialId, "simplified_view") > 0
+      || Boolean(material?.simplifiedText);
+    const timeSpentMinutes = getSessionMinutes(input.studentId, input.materialId);
+
+    const metrics: SessionMetrics = {
+      studentId: input.studentId,
+      materialId: input.materialId,
+      assignmentId: input.assignmentId,
+      score: input.score,
+      timeSpentMinutes,
+      attempts: input.attempts,
+      explainCount,
+      audioPlayCount,
+      simplifiedUsed,
+      vocabOpened,
+      hintCount: input.hintCount,
+      wrongQuestions: input.wrongQuestions,
+      topic: material?.title ?? "Material",
+      subject: material?.subject ?? "",
+    };
+
+    const existing = getLearningProfile(input.studentId);
+    const student = getStudents().find(s => s.id === input.studentId);
+    const ai = await generatePostLessonIntelligence(metrics, existing, {
+      visualPreferred: Boolean(student?.visualPreferred),
+    });
+
+    const report: LearningReport = {
+      id: `rep-${Date.now()}`,
+      studentId: input.studentId,
+      materialId: input.materialId,
+      assignmentId: input.assignmentId,
+      performanceSummary: ai.performanceSummary,
+      strengths: ai.strengths,
+      difficulties: ai.difficulties,
+      recommendations: ai.recommendations,
+      nextLessonSteps: ai.nextLessonSteps,
+      patterns: ai.patterns,
+      teacherRecommendations: ai.teacherRecommendations,
+      studentMessage: ai.studentMessage,
+      studyPlan: ai.studyPlan,
+      fullTeacherReport: ai.fullTeacherReport,
+      createdAt: new Date().toISOString(),
+    };
+    addLearningReport(report);
+
+    const profile: LearningProfile = {
+      studentId: input.studentId,
+      traits: ai.profileUpdate.traits.length ? ai.profileUpdate.traits : (existing?.traits ?? []),
+      strengths: ai.profileUpdate.strengths.length ? ai.profileUpdate.strengths : (existing?.strengths ?? []),
+      supportNeeds: ai.profileUpdate.supportNeeds.length
+        ? ai.profileUpdate.supportNeeds
+        : (existing?.supportNeeds ?? []),
+      preferredFormats: ai.profileUpdate.preferredFormats.length
+        ? ai.profileUpdate.preferredFormats
+        : (existing?.preferredFormats ?? []),
+      teacherRecommendations: ai.profileUpdate.teacherRecommendations.length
+        ? ai.profileUpdate.teacherRecommendations
+        : (existing?.teacherRecommendations ?? []),
+      updatedAt: new Date().toISOString(),
+      sessionCount: (existing?.sessionCount ?? 0) + 1,
+    };
+    upsertLearningProfile(profile);
+
+    const boosterCards: Flashcard[] = (ai.memoryBooster.flashcards || [])
+      .filter(c => c.front && c.back)
+      .slice(0, 5)
+      .map((c, i) => ({
+        id: `mb-fc-${input.assignmentId}-${i}`,
+        materialId: input.materialId,
+        front: c.front,
+        back: c.back,
+        type: (c.type === "definition" || c.type === "concept" || c.type === "quick"
+          ? c.type
+          : "quick") as Flashcard["type"],
+      }));
+
+    // Also merge into material flashcards store if empty
+    if (getFlashcardsForMaterial(input.materialId).length === 0 && boosterCards.length) {
+      upsertFlashcardsForMaterial(input.materialId, boosterCards.map((c, i) => ({
+        ...c,
+        id: `fc-${input.materialId}-mb-${i}`,
+      })));
+    }
+
+    const booster: MemoryBoosterPack = {
+      id: `mb-${Date.now()}`,
+      studentId: input.studentId,
+      materialId: input.materialId,
+      assignmentId: input.assignmentId,
+      shortSummary: ai.memoryBooster.shortSummary,
+      flashcards: boosterCards,
+      reviewQuestions: (ai.memoryBooster.reviewQuestions || []).slice(0, 5),
+      reviewSchedule: {
+        after1Day: isoPlusDays(1),
+        after3Days: isoPlusDays(3),
+        after7Days: isoPlusDays(7),
+      },
+      createdAt: new Date().toISOString(),
+    };
+    addMemoryBooster(booster);
+
+    await assignmentService.complete(
+      input.assignmentId,
+      input.score,
+      vocabOpened,
+      audioPlayCount > 0,
+      { timeSpentMinutes }
+    );
+
+    clearSessionStart(input.studentId, input.materialId);
+
+    return { report, profile, booster };
   },
 };
 

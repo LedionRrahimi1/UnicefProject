@@ -1,46 +1,85 @@
 import React from "react";
 import { useApp } from "./store";
-import { User, Bell, Lock, Palette, Accessibility } from "lucide-react";
+import { User, Bell, Lock, Languages } from "lucide-react";
+import { AccessibilityIcon } from "./AccessibilityIcon";
+import { useT } from "./useT";
 
 export default function Settings() {
   const { user, accessibility, setAccessibility } = useApp();
+  const { t, lang } = useT();
   const isTeacher = user?.role === "teacher";
 
   return (
-    <div className="max-w-2xl space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold">Cilësimet</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">Menaxho preferencat e llogarisë tënde.</p>
+    <div className="max-w-2xl mx-auto w-full space-y-6">
+      <div className="space-y-1">
+        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">{t("settings.title")}</h1>
+        <p className="text-muted-foreground text-sm sm:text-base">{t("settings.subtitle")}</p>
       </div>
 
-      {/* Profile */}
-      <div className="bg-card rounded-2xl border border-border p-5">
-        <h2 className="font-semibold mb-4 flex items-center gap-2"><User size={16} className="text-primary" /> Profili</h2>
-        <div className="grid gap-3">
+      <section className="ui-card p-5 sm:p-6">
+        <h2 className="ui-section-title mb-5 flex items-center gap-2">
+          <span className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+            <User size={16} className="text-primary" />
+          </span>
+          {t("settings.profile")}
+        </h2>
+        <div className="grid gap-4">
           <div>
-            <label className="text-sm font-medium mb-1.5 block">Emri</label>
-            <input defaultValue={user?.name} className="w-full bg-input-background border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/50" aria-label="Emri" />
+            <label className="mb-2 block">{t("settings.name")}</label>
+            <input defaultValue={user?.name} className="ui-input" aria-label={t("settings.name")} />
           </div>
           <div>
-            <label className="text-sm font-medium mb-1.5 block">Email</label>
-            <input defaultValue={user?.email} type="email" className="w-full bg-input-background border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/50" aria-label="Email" />
+            <label className="mb-2 block">{t("settings.email")}</label>
+            <input defaultValue={user?.email} type="email" className="ui-input" aria-label={t("settings.email")} />
           </div>
-          <button className="bg-primary text-primary-foreground text-sm font-medium py-2.5 rounded-xl hover:bg-primary/90 transition-colors w-full sm:w-auto px-6">
-            Ruaj ndryshimet
-          </button>
+          <button className="ui-btn-primary w-full sm:w-auto">{t("settings.save")}</button>
         </div>
-      </div>
+      </section>
 
-      {/* Accessibility */}
-      <div className="bg-card rounded-2xl border border-border p-5">
-        <h2 className="font-semibold mb-4 flex items-center gap-2"><Accessibility size={16} className="text-primary" /> Aksesueshmëria</h2>
-        <div className="space-y-4">
+      <section className="ui-card p-5 sm:p-6">
+        <h2 className="ui-section-title mb-5 flex items-center gap-2">
+          <span className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+            <AccessibilityIcon size={16} className="text-primary" />
+          </span>
+          {t("settings.accessibility")}
+        </h2>
+        <div className="space-y-5">
           <div>
-            <label className="text-sm font-medium mb-1.5 block">Fonti i leximit</label>
+            <label className="mb-2 block flex items-center gap-2">
+              <Languages size={14} className="text-primary" /> {t("settings.language")}
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setAccessibility({ appLanguage: "sq" })}
+                className={`min-h-11 py-2.5 rounded-2xl text-sm font-bold border-2 transition-colors ${
+                  lang === "sq" ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/30"
+                }`}
+              >
+                AL · Shqip
+              </button>
+              <button
+                type="button"
+                onClick={() => setAccessibility({ appLanguage: "en" })}
+                className={`min-h-11 py-2.5 rounded-2xl text-sm font-bold border-2 transition-colors ${
+                  lang === "en" ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/30"
+                }`}
+              >
+                EN · English
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-2 block">{t("settings.readingFont")}</label>
             <div className="grid grid-cols-3 gap-2">
-              {[{ id: "inter", label: "Inter" }, { id: "lexend", label: "Lexend" }, { id: "atkinson", label: "Atkinson" }].map(f => (
-                <button key={f.id} onClick={() => setAccessibility({ readingFont: f.id as any })}
-                  className={`py-2 rounded-xl text-sm border-2 transition-colors ${accessibility.readingFont === f.id ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/30"}`}>
+              {[{ id: "inter", label: "Nunito" }, { id: "lexend", label: "Lexend" }, { id: "atkinson", label: "Atkinson" }].map(f => (
+                <button key={f.id} onClick={() => setAccessibility({ readingFont: f.id as "inter" | "lexend" | "atkinson" })}
+                  className={`min-h-11 py-2.5 rounded-2xl text-sm font-semibold border-2 transition-colors ${
+                    accessibility.readingFont === f.id
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border hover:border-primary/30"
+                  }`}>
                   {f.label}
                 </button>
               ))}
@@ -48,56 +87,67 @@ export default function Settings() {
           </div>
 
           <div>
-            <label className="text-sm font-medium mb-1.5 block">Madhësia e tekstit: {accessibility.fontSize}px</label>
+            <label className="mb-2 block">{t("settings.fontSize")}: {accessibility.fontSize}px</label>
             <input type="range" min={12} max={24} step={2} value={accessibility.fontSize}
               onChange={e => setAccessibility({ fontSize: Number(e.target.value) })}
-              className="w-full accent-primary" aria-label="Madhësia e tekstit" />
+              className="w-full accent-primary h-2" aria-label={t("settings.fontSize")} />
           </div>
 
           {[
-            { label: "Kontrast i lartë", key: "highContrast", val: accessibility.highContrast },
-            { label: "Modaliteti i errët", key: "darkMode", val: accessibility.darkMode },
-            { label: "Pakëso animacionet", key: "reducedMotion", val: accessibility.reducedMotion },
+            { label: t("settings.highContrast"), key: "highContrast", val: accessibility.highContrast },
+            { label: t("settings.darkMode"), key: "darkMode", val: accessibility.darkMode },
+            { label: t("settings.reducedMotion"), key: "reducedMotion", val: accessibility.reducedMotion },
           ].map(s => (
-            <label key={s.key} className={`flex items-center justify-between px-4 py-3 rounded-xl border-2 cursor-pointer transition-all ${s.val ? "border-primary bg-primary/5" : "border-border"}`}>
-              <span className="text-sm font-medium">{s.label}</span>
+            <label key={s.key} className={`flex items-center justify-between px-4 py-3.5 rounded-2xl border-2 cursor-pointer transition-all min-h-14 ${s.val ? "border-primary bg-primary/5" : "border-border"}`}>
+              <span className="text-sm font-semibold">{s.label}</span>
               <div onClick={() => setAccessibility({ [s.key]: !s.val })}
-                className={`w-10 h-5 rounded-full relative transition-colors ${s.val ? "bg-primary" : "bg-muted-foreground/30"}`}
+                className={`w-11 h-6 rounded-full relative transition-colors ${s.val ? "bg-primary" : "bg-muted-foreground/25"}`}
                 role="switch" aria-checked={s.val} tabIndex={0}>
-                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${s.val ? "left-5" : "left-0.5"}`} />
+                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${s.val ? "left-6" : "left-1"}`} />
               </div>
             </label>
           ))}
         </div>
-      </div>
+      </section>
 
-      {/* Notifications */}
       {isTeacher && (
-        <div className="bg-card rounded-2xl border border-border p-5">
-          <h2 className="font-semibold mb-4 flex items-center gap-2"><Bell size={16} className="text-primary" /> Njoftimet</h2>
+        <section className="ui-card p-5 sm:p-6">
+          <h2 className="ui-section-title mb-5 flex items-center gap-2">
+            <span className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Bell size={16} className="text-primary" />
+            </span>
+            {t("nav.notifications")}
+          </h2>
           <div className="space-y-2">
-            {["Kur nxënësi përfundon detyrën", "Kur nxënësi ka nevojë për mbështetje", "Raporte javore"].map(n => (
-              <label key={n} className="flex items-center justify-between px-4 py-3 rounded-xl border border-border cursor-pointer hover:bg-muted transition-colors">
-                <span className="text-sm">{n}</span>
-                <input type="checkbox" defaultChecked className="w-4 h-4 accent-primary" />
+            {(lang === "en"
+              ? ["When a student finishes an assignment", "When a student needs support", "Weekly reports"]
+              : ["Kur nxënësi përfundon detyrën", "Kur nxënësi ka nevojë për mbështetje", "Raporte javore"]
+            ).map(n => (
+              <label key={n} className="flex items-center justify-between px-4 py-3.5 rounded-2xl border border-border cursor-pointer hover:bg-muted/60 transition-colors min-h-14">
+                <span className="text-sm font-medium">{n}</span>
+                <input type="checkbox" defaultChecked className="w-5 h-5 accent-primary" />
               </label>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Privacy */}
-      <div className="bg-card rounded-2xl border border-border p-5">
-        <h2 className="font-semibold mb-4 flex items-center gap-2"><Lock size={16} className="text-primary" /> Privatësia</h2>
+      <section className="ui-card p-5 sm:p-6">
+        <h2 className="ui-section-title mb-5 flex items-center gap-2">
+          <span className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Lock size={16} className="text-primary" />
+          </span>
+          {t("settings.privacy")}
+        </h2>
         <div className="space-y-2">
-          <button className="w-full text-left px-4 py-3 rounded-xl border border-border hover:bg-muted transition-colors text-sm">
-            Shkarko të dhënat e mia
+          <button className="w-full text-left px-4 py-3.5 rounded-2xl border border-border hover:bg-muted/60 transition-colors text-sm font-medium min-h-12">
+            {t("settings.downloadData")}
           </button>
-          <button className="w-full text-left px-4 py-3 rounded-xl border border-destructive/20 text-destructive hover:bg-destructive/5 transition-colors text-sm">
-            Fshi llogarinë time
+          <button className="w-full text-left px-4 py-3.5 rounded-2xl border border-destructive/20 text-destructive hover:bg-destructive/5 transition-colors text-sm font-medium min-h-12">
+            {t("settings.deleteAccount")}
           </button>
         </div>
-      </div>
+      </section>
     </div>
   );
 }

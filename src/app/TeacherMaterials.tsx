@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { Plus, Search, BookOpen, Eye, Edit, Copy, Trash2, Users, Filter } from "lucide-react";
+import { Plus, Search, BookOpen, Eye, Copy, Trash2, Users } from "lucide-react";
 import { materialService } from "./services";
 import type { Material } from "./types";
 import { toast } from "sonner";
+import { useT } from "./useT";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -11,15 +12,20 @@ const statusColors: Record<string, string> = {
   approved: "bg-secondary text-secondary-foreground",
   published: "bg-success-muted text-success-muted-foreground",
 };
-const statusLabels: Record<string, string> = {
-  draft: "Skicë", review: "Në shqyrtim", approved: "Aprovuar", published: "Publikuar",
-};
 
 export default function TeacherMaterials() {
+  const { t } = useT();
   const [materials, setMaterials] = useState<Material[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [loading, setLoading] = useState(true);
+
+  const statusLabels: Record<string, string> = {
+    draft: t("status.draft"),
+    review: t("status.review"),
+    approved: t("status.approved"),
+    published: t("status.published"),
+  };
 
   useEffect(() => {
     materialService.getAll().then(m => { setMaterials(m); setLoading(false); });
@@ -35,19 +41,27 @@ export default function TeacherMaterials() {
   const handleDelete = async (id: string) => {
     await materialService.delete(id);
     setMaterials(prev => prev.filter(m => m.id !== id));
-    toast.success("Materiali u fshi.");
+    toast.success(t("tm.deleted"));
   };
+
+  const filterOptions = [
+    { val: "all", label: t("common.all") },
+    { val: "draft", label: t("status.draft") },
+    { val: "review", label: t("status.review") },
+    { val: "approved", label: t("status.approved") },
+    { val: "published", label: t("status.published") },
+  ];
 
   return (
     <div className="space-y-5 max-w-6xl">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Materialet</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Menaxho të gjitha materialet mësimore.</p>
+          <h1 className="text-2xl font-bold">{t("tm.title")}</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">{t("tm.subtitle")}</p>
         </div>
         <Link to="/teacher/materials/new"
           className="flex items-center gap-2 bg-primary text-primary-foreground font-medium px-4 py-2.5 rounded-xl hover:bg-primary/90 transition-colors shadow-sm shadow-primary/25">
-          <Plus size={16} /> Krijo material
+          <Plus size={16} /> {t("tm.create")}
         </Link>
       </div>
 
@@ -55,17 +69,11 @@ export default function TeacherMaterials() {
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2 bg-card border border-border rounded-xl px-3 py-1.5 flex-1 min-w-48">
           <Search size={15} className="text-muted-foreground" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Kërko material..."
-            className="bg-transparent text-sm outline-none text-foreground placeholder:text-muted-foreground w-full" aria-label="Kërko" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t("tm.search")}
+            className="bg-transparent text-sm outline-none text-foreground placeholder:text-muted-foreground w-full" aria-label={t("tm.search")} />
         </div>
         <div className="flex gap-1.5 bg-card border border-border rounded-xl p-1">
-          {[
-            { val: "all", label: "Të gjitha" },
-            { val: "draft", label: "Skicë" },
-            { val: "review", label: "Në shqyrtim" },
-            { val: "approved", label: "Aprovuar" },
-            { val: "published", label: "Publikuar" },
-          ].map(opt => (
+          {filterOptions.map(opt => (
             <button key={opt.val} onClick={() => setFilter(opt.val)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === opt.val ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}>
               {opt.label}
@@ -87,10 +95,10 @@ export default function TeacherMaterials() {
       ) : filtered.length === 0 ? (
         <div className="bg-card rounded-2xl border border-border p-12 text-center">
           <BookOpen size={36} className="text-muted-foreground mx-auto mb-3" />
-          <p className="font-semibold text-foreground mb-1">Nuk u gjet asnjë material</p>
-          <p className="text-sm text-muted-foreground mb-4">Krijo materialin tënd të parë mësimor.</p>
+          <p className="font-semibold text-foreground mb-1">{t("tm.empty")}</p>
+          <p className="text-sm text-muted-foreground mb-4">{t("tm.emptyHint")}</p>
           <Link to="/teacher/materials/new" className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors">
-            <Plus size={16} /> Krijo material
+            <Plus size={16} /> {t("tm.create")}
           </Link>
         </div>
       ) : (
@@ -100,7 +108,7 @@ export default function TeacherMaterials() {
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1 min-w-0 mr-3">
                   <h3 className="font-semibold text-foreground truncate">{m.title}</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">{m.subject} · Klasa {m.class}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{m.subject} · {t("common.class")} {m.class}</p>
                 </div>
                 <span className={`text-xs px-2.5 py-1 rounded-full font-medium shrink-0 ${statusColors[m.status]}`}>
                   {statusLabels[m.status]}
@@ -116,7 +124,7 @@ export default function TeacherMaterials() {
               {m.completionRate > 0 && (
                 <div className="mb-4">
                   <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                    <span>Përfundim</span>
+                    <span>{t("tm.completion")}</span>
                     <span>{m.completionRate}%</span>
                   </div>
                   <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -128,14 +136,14 @@ export default function TeacherMaterials() {
               <div className="flex items-center gap-1.5 pt-3 border-t border-border opacity-0 group-hover:opacity-100 transition-opacity">
                 <Link to={`/teacher/materials/${m.id}/review`}
                   className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
-                  <Eye size={12} /> Shiko
+                  <Eye size={12} /> {t("common.view")}
                 </Link>
                 <button className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                  <Copy size={12} /> Kopjo
+                  <Copy size={12} /> {t("common.copy")}
                 </button>
                 <button onClick={() => handleDelete(m.id)}
                   className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors ml-auto">
-                  <Trash2 size={12} /> Fshi
+                  <Trash2 size={12} /> {t("common.delete")}
                 </button>
               </div>
             </div>

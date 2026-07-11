@@ -1,6 +1,7 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router";
 import { AppProvider, useApp } from "./store";
+import { useT } from "./useT";
 
 import Landing from "./Landing";
 import Login from "./Login";
@@ -20,6 +21,7 @@ import ReadingWorkspace from "./ReadingWorkspace";
 import Quiz from "./Quiz";
 import Results from "./Results";
 import StudentRewards from "./StudentRewards";
+import StudentPractice from "./StudentPractice";
 
 function ProtectedRoute({ children, role }: { children: React.ReactNode; role?: "teacher" | "student" }) {
   const { user } = useApp();
@@ -32,17 +34,18 @@ function ProtectedRoute({ children, role }: { children: React.ReactNode; role?: 
 
 function NotFound() {
   const { user } = useApp();
+  const { t } = useT();
   return (
     <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-5">
       <div className="text-center max-w-sm">
         <div className="text-7xl font-bold text-primary/20 mb-4">404</div>
-        <h1 className="text-2xl font-bold mb-2">Faqja nuk u gjet</h1>
-        <p className="text-muted-foreground mb-6 text-sm">Faqja që po kërkoni nuk ekziston.</p>
+        <h1 className="text-2xl font-bold mb-2">{t("common.pageNotFound")}</h1>
+        <p className="text-muted-foreground mb-6 text-sm">{t("common.pageMissing")}</p>
         <a
           href={user ? (user.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard") : "/"}
           className="bg-primary text-primary-foreground font-medium px-6 py-2.5 rounded-xl hover:bg-primary/90 transition-colors inline-block"
         >
-          Kthehu në shtëpi
+          {t("common.backHome")}
         </a>
       </div>
     </div>
@@ -101,6 +104,7 @@ function AppRoutes() {
         <Route path="read/:id" element={<ReadingWorkspace />} />
         <Route path="quiz/:id" element={<Quiz />} />
         <Route path="results/:id" element={<Results />} />
+        <Route path="practice/:id" element={<StudentPractice />} />
         <Route path="rewards" element={<StudentRewards />} />
         <Route path="settings" element={<Settings />} />
       </Route>

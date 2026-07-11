@@ -5,6 +5,7 @@ import { gamificationService } from "./services";
 import { MOCK_STUDENTS, ALL_BADGES } from "./mockData";
 import type { StudentLevel } from "./types";
 import { toast } from "sonner";
+import { useT } from "./useT";
 
 const rarityLabels: Record<string, string> = {
   common: "I zakonshëm", uncommon: "Jo i zakonshëm",
@@ -19,6 +20,7 @@ const rarityColors: Record<string, string> = {
 };
 
 export default function TeacherRewards() {
+  const { t } = useT();
   const [levels, setLevels] = useState<(StudentLevel & { studentId: string; badgeCount: number })[]>([]);
   const [badgeOpen, setBadgeOpen] = useState(false);
   const [xpOpen, setXpOpen] = useState(false);
@@ -38,7 +40,7 @@ export default function TeacherRewards() {
 
   const awardBadge = async () => {
     await gamificationService.awardTeacherBadge(selectedStudent, selectedBadge, "teacher-1", message, 0);
-    toast.success(`Titulli u dhuruar me sukses!`);
+    toast.success(t("tr.awardTitle"));
     setBadgeOpen(false);
     setMessage("");
   };
@@ -47,28 +49,37 @@ export default function TeacherRewards() {
     if (!xpReason.trim()) return;
     const student = MOCK_STUDENTS.find(s => s.id === selectedStudent);
     await gamificationService.awardXP(selectedStudent, xpAmount, xpReason, "teacher", undefined, "teacher", "teacher-1");
-    toast.success(`${xpAmount} Yje iu dhuruan me sukses ${student?.name}.`);
+    toast.success(`${xpAmount} ${t("common.stars")} · ${student?.name ?? ""}`);
     setXpOpen(false);
     setXpReason("");
   };
 
   const teacherBadges = ALL_BADGES.filter(b => !b.isAutomatic);
 
+  const tableHeaders = [
+    t("common.student"),
+    t("common.level"),
+    t("tr.totalStars"),
+    t("tr.progress"),
+    t("tr.titles"),
+    t("common.actions"),
+  ];
+
   return (
     <div className="space-y-6 max-w-6xl">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Yjet dhe Titujt</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">Menaxho shpërblimet dhe motivoni nxënësit tuaj.</p>
+          <h1 className="text-2xl font-bold">{t("tr.title")}</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">{t("tr.subtitle")}</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setBadgeOpen(true)}
             className="flex items-center gap-2 border border-border px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-muted transition-colors">
-            <Award size={16} /> Dhuro titull
+            <Award size={16} /> {t("tr.awardTitle")}
           </button>
           <button onClick={() => setXpOpen(true)}
             className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm">
-            <Star size={16} fill="currentColor" /> Dhuro Yje
+            <Star size={16} fill="currentColor" /> {t("tr.awardStars")}
           </button>
         </div>
       </div>
@@ -76,17 +87,17 @@ export default function TeacherRewards() {
       {/* Student rewards table */}
       <div className="bg-card rounded-2xl border border-border overflow-hidden">
         <div className="p-5 border-b border-border">
-          <h2 className="font-semibold">Shpërblimet e nxënësve</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Renditje alfabetike. Nuk ka krahasim mes nxënësve.</p>
+          <h2 className="font-semibold">{t("tr.studentRewards")}</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("tr.alphaNote")}</p>
         </div>
         {loading ? (
-          <div className="p-10 text-center text-muted-foreground">Duke ngarkuar...</div>
+          <div className="p-10 text-center text-muted-foreground">{t("common.loading")}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/40">
                 <tr>
-                  {["Nxënësi", "Niveli", "Yje totale", "Progresi", "Tituj", "Veprime"].map(h => (
+                  {tableHeaders.map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">{h}</th>
                   ))}
                 </tr>
@@ -111,7 +122,7 @@ export default function TeacherRewards() {
                       <td className="px-4 py-3 font-medium">
                         <span className="inline-flex items-center gap-1">
                           <Star size={12} className="text-primary" fill="currentColor" />
-                          {lvl?.totalXP ?? 0} Yje
+                          {lvl?.totalXP ?? 0} {t("common.stars")}
                         </span>
                       </td>
                       <td className="px-4 py-3 w-32">
@@ -122,18 +133,18 @@ export default function TeacherRewards() {
                       </td>
                       <td className="px-4 py-3">
                         <span className="bg-primary/10 text-primary text-xs font-medium px-2 py-1 rounded-full">
-                          {lvl?.badgeCount ?? 0} tituj
+                          {lvl?.badgeCount ?? 0} {t("tr.titles").toLowerCase()}
                         </span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1.5">
                           <button onClick={() => { setSelectedStudent(student.id); setBadgeOpen(true); }}
                             className="text-xs px-2.5 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
-                            Titull
+                            {t("tr.titles")}
                           </button>
                           <button onClick={() => { setSelectedStudent(student.id); setXpOpen(true); }}
                             className="text-xs px-2.5 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors inline-flex items-center gap-1">
-                            <Star size={11} fill="currentColor" /> Yje
+                            <Star size={11} fill="currentColor" /> {t("common.stars")}
                           </button>
                         </div>
                       </td>
@@ -149,9 +160,9 @@ export default function TeacherRewards() {
       {/* Badge templates */}
       <div className="bg-card rounded-2xl border border-border p-5">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold">Titujt e mësueses</h2>
+          <h2 className="font-semibold">{t("tr.teacherTitles")}</h2>
           <button className="flex items-center gap-1.5 text-sm text-primary hover:underline">
-            <Plus size={14} /> Krijo titull
+            <Plus size={14} /> {t("tr.createTitle")}
           </button>
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -178,22 +189,22 @@ export default function TeacherRewards() {
           <Dialog.Overlay className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50" />
           <Dialog.Content className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto bg-card rounded-2xl border border-border shadow-2xl p-6 z-50 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <Dialog.Title className="font-semibold text-lg">Dhuro titull</Dialog.Title>
+              <Dialog.Title className="font-semibold text-lg">{t("tr.awardTitle")}</Dialog.Title>
               <Dialog.Close asChild>
-                <button className="p-1.5 rounded-lg hover:bg-muted" aria-label="Mbyll"><X size={16} /></button>
+                <button className="p-1.5 rounded-lg hover:bg-muted" aria-label={t("common.close")}><X size={16} /></button>
               </Dialog.Close>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Nxënësi</label>
+                <label className="text-sm font-medium mb-1.5 block">{t("common.student")}</label>
                 <select value={selectedStudent} onChange={e => setSelectedStudent(e.target.value)}
                   className="w-full bg-input-background border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/50">
                   {MOCK_STUDENTS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Titulli</label>
+                <label className="text-sm font-medium mb-1.5 block">{t("tr.titles")}</label>
                 <div className="space-y-2">
                   {teacherBadges.map(b => (
                     <label key={b.id} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${selectedBadge === b.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"}`}>
@@ -208,20 +219,20 @@ export default function TeacherRewards() {
                 </div>
               </div>
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Mesazh personal</label>
+                <label className="text-sm font-medium mb-1.5 block">{t("tr.personalMsg")}</label>
                 <textarea value={message} onChange={e => setMessage(e.target.value)}
-                  placeholder="Shkruaj një mesazh inkurajues..."
+                  placeholder={t("tr.msgPlaceholder")}
                   rows={3} className="w-full bg-input-background border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/50 resize-none text-foreground placeholder:text-muted-foreground" />
               </div>
             </div>
 
             <div className="flex gap-2 mt-5">
               <Dialog.Close asChild>
-                <button className="flex-1 py-2.5 rounded-xl border border-border text-sm hover:bg-muted transition-colors">Anulo</button>
+                <button className="flex-1 py-2.5 rounded-xl border border-border text-sm hover:bg-muted transition-colors">{t("common.cancel")}</button>
               </Dialog.Close>
               <button onClick={awardBadge}
                 className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
-                Dhuro titull
+                {t("tr.awardTitle")}
               </button>
             </div>
           </Dialog.Content>
@@ -235,15 +246,15 @@ export default function TeacherRewards() {
           <Dialog.Content className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto bg-card rounded-2xl border border-border shadow-2xl p-6 z-50">
             <div className="flex items-center justify-between mb-4">
               <Dialog.Title className="font-semibold text-lg inline-flex items-center gap-2">
-                <Star size={18} className="text-primary" fill="currentColor" /> Dhuro Yje
+                <Star size={18} className="text-primary" fill="currentColor" /> {t("tr.awardStars")}
               </Dialog.Title>
               <Dialog.Close asChild>
-                <button className="p-1.5 rounded-lg hover:bg-muted" aria-label="Mbyll"><X size={16} /></button>
+                <button className="p-1.5 rounded-lg hover:bg-muted" aria-label={t("common.close")}><X size={16} /></button>
               </Dialog.Close>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Nxënësi</label>
+                <label className="text-sm font-medium mb-1.5 block">{t("common.student")}</label>
                 <select value={selectedStudent} onChange={e => setSelectedStudent(e.target.value)}
                   className="w-full bg-input-background border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/50">
                   {MOCK_STUDENTS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -251,16 +262,16 @@ export default function TeacherRewards() {
               </div>
               <div>
                 <label className="text-sm font-medium mb-1.5 block">
-                  Sasia e Yjeve:{" "}
+                  {t("tr.starAmount")}:{" "}
                   <span className="text-primary inline-flex items-center gap-1">
-                    <Star size={12} fill="currentColor" /> {xpAmount} Yje
+                    <Star size={12} fill="currentColor" /> {xpAmount} {t("common.stars")}
                   </span>
                 </label>
                 <input type="range" min={5} max={100} step={5} value={xpAmount} onChange={e => setXpAmount(Number(e.target.value))}
                   className="w-full accent-primary" />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Arsyeja (e detyrueshme)</label>
+                <label className="text-sm font-medium mb-1.5 block">{t("tr.reason")}</label>
                 <textarea value={xpReason} onChange={e => setXpReason(e.target.value)}
                   placeholder="p.sh. Punë e shkëlqyer gjatë orës mësimore..."
                   rows={2} className="w-full bg-input-background border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/50 resize-none text-foreground placeholder:text-muted-foreground" />
@@ -268,11 +279,11 @@ export default function TeacherRewards() {
             </div>
             <div className="flex gap-2 mt-5">
               <Dialog.Close asChild>
-                <button className="flex-1 py-2.5 rounded-xl border border-border text-sm hover:bg-muted transition-colors">Anulo</button>
+                <button className="flex-1 py-2.5 rounded-xl border border-border text-sm hover:bg-muted transition-colors">{t("common.cancel")}</button>
               </Dialog.Close>
               <button onClick={awardXP} disabled={!xpReason.trim()}
                 className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-1.5">
-                <Star size={14} fill="currentColor" /> Dhuro Yje
+                <Star size={14} fill="currentColor" /> {t("tr.awardStars")}
               </button>
             </div>
           </Dialog.Content>

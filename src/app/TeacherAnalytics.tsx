@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { BarChart3, TrendingUp, Clock, BookOpen, Headphones, RefreshCw } from "lucide-react";
 import { analyticsService } from "./services";
-import { MOCK_STUDENTS, WEEKLY_PROGRESS_DATA, SKILLS_DATA } from "./mockData";
+import { MOCK_STUDENTS, WEEKLY_PROGRESS_DATA } from "./mockData";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Legend,
 } from "recharts";
+import { useT } from "./useT";
 
 const classData = [
   { name: "VI-1", score: 68 },
@@ -26,6 +27,7 @@ const errorTypes = [
 const COLORS = ["#4f46e5", "#10b981", "#f59e0b", "#ef4444"];
 
 export default function TeacherAnalytics() {
+  const { t } = useT();
   const [overview, setOverview] = useState<any>(null);
 
   useEffect(() => {
@@ -33,19 +35,28 @@ export default function TeacherAnalytics() {
   }, []);
 
   const statCards = overview ? [
-    { label: "Rezultati mesatar", value: `${overview.averageScore}%`, icon: TrendingUp, color: "text-primary" },
-    { label: "% Përfundim", value: `${overview.completionRate}%`, icon: BarChart3, color: "text-success" },
-    { label: "Koha mesatare", value: `${overview.averageTimeMinutes}min`, icon: Clock, color: "text-primary" },
-    { label: "Fjalë të shpjeguara", value: `${overview.wordsExplained}`, icon: BookOpen, color: "text-warning" },
-    { label: "Përdorim audio", value: `${overview.audioUsage}%`, icon: Headphones, color: "text-secondary-foreground" },
-    { label: "Tentativa mesatare", value: `${overview.averageAttempts}`, icon: RefreshCw, color: "text-muted-foreground" },
+    { label: t("ta.avgScore"), value: `${overview.averageScore}%`, icon: TrendingUp, color: "text-primary" },
+    { label: t("ta.completion"), value: `${overview.completionRate}%`, icon: BarChart3, color: "text-success" },
+    { label: t("ta.avgTime"), value: `${overview.averageTimeMinutes}min`, icon: Clock, color: "text-primary" },
+    { label: t("ta.wordsExplained"), value: `${overview.wordsExplained}`, icon: BookOpen, color: "text-warning" },
+    { label: t("ta.audioUse"), value: `${overview.audioUsage}%`, icon: Headphones, color: "text-secondary-foreground" },
+    { label: t("ta.avgAttempts"), value: `${overview.averageAttempts}`, icon: RefreshCw, color: "text-muted-foreground" },
   ] : [];
+
+  const tableHeaders = [
+    t("common.student"),
+    t("common.class"),
+    t("common.score"),
+    t("common.materials"),
+    t("ta.avgTime"),
+    t("ta.note"),
+  ];
 
   return (
     <div className="space-y-6 max-w-6xl">
       <div>
-        <h1 className="text-2xl font-bold">Analitika</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">Gjurmo progresin e nxënësve dhe identifiko nevojat.</p>
+        <h1 className="text-2xl font-bold">{t("ta.title")}</h1>
+        <p className="text-muted-foreground text-sm mt-0.5">{t("ta.subtitle")}</p>
       </div>
 
       {/* Stat cards */}
@@ -72,36 +83,36 @@ export default function TeacherAnalytics() {
       <div className="grid lg:grid-cols-2 gap-5">
         {/* Progress over time */}
         <div className="bg-card rounded-2xl border border-border p-5">
-          <h2 className="font-semibold mb-4">Progresi gjatë kohës</h2>
+          <h2 className="font-semibold mb-4">{t("ta.progressOverTime")}</h2>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={WEEKLY_PROGRESS_DATA}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="week" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
               <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" domain={[40, 100]} />
               <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
-              <Line type="monotone" dataKey="score" stroke="#4f46e5" strokeWidth={2.5} name="Rezultat" />
-              <Line type="monotone" dataKey="completion" stroke="#10b981" strokeWidth={2.5} name="Përfundim %" />
+              <Line type="monotone" dataKey="score" stroke="#4f46e5" strokeWidth={2.5} name={t("common.score")} />
+              <Line type="monotone" dataKey="completion" stroke="#10b981" strokeWidth={2.5} name={t("ta.completion")} />
             </LineChart>
           </ResponsiveContainer>
         </div>
 
         {/* Results by class */}
         <div className="bg-card rounded-2xl border border-border p-5">
-          <h2 className="font-semibold mb-4">Rezultatet sipas klasës</h2>
+          <h2 className="font-semibold mb-4">{t("ta.byClass")}</h2>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={classData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="name" tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" />
               <YAxis tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" domain={[0, 100]} />
               <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
-              <Bar dataKey="score" fill="#4f46e5" radius={[6, 6, 0, 0]} name="Rezultati mesatar" />
+              <Bar dataKey="score" fill="#4f46e5" radius={[6, 6, 0, 0]} name={t("ta.avgScore")} />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
         {/* Error types */}
         <div className="bg-card rounded-2xl border border-border p-5">
-          <h2 className="font-semibold mb-4">Llojet e pyetjeve me më shumë gabime</h2>
+          <h2 className="font-semibold mb-4">{t("ta.errorTypes")}</h2>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie data={errorTypes} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name, value }) => `${value}%`} labelLine={false}>
@@ -115,14 +126,14 @@ export default function TeacherAnalytics() {
 
         {/* Audio usage */}
         <div className="bg-card rounded-2xl border border-border p-5">
-          <h2 className="font-semibold mb-4">Përdorimi i audios sipas materialit</h2>
+          <h2 className="font-semibold mb-4">{t("ta.audioByMaterial")}</h2>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={audioData} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis type="number" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" domain={[0, 100]} />
               <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" width={80} />
               <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
-              <Bar dataKey="usage" fill="#10b981" radius={[0, 6, 6, 0]} name="Përdorim %" />
+              <Bar dataKey="usage" fill="#10b981" radius={[0, 6, 6, 0]} name={t("ta.audioUse")} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -131,14 +142,14 @@ export default function TeacherAnalytics() {
       {/* Students table */}
       <div className="bg-card rounded-2xl border border-border overflow-hidden">
         <div className="p-5 border-b border-border">
-          <h2 className="font-semibold">Tabela e nxënësve</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Shiko progresin individual të çdo nxënësi.</p>
+          <h2 className="font-semibold">{t("ta.studentsTable")}</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">{t("ta.studentsHint")}</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/40">
               <tr>
-                {["Nxënësi", "Klasa", "Rezultati", "Materialet", "Koha mesatare", "Vërejtja"].map(h => (
+                {tableHeaders.map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">{h}</th>
                 ))}
               </tr>
@@ -152,7 +163,7 @@ export default function TeacherAnalytics() {
                       <span className="font-medium">{s.name}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">Klasa {s.class}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{t("common.class")} {s.class}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <div className="w-14 h-1.5 bg-muted rounded-full overflow-hidden">

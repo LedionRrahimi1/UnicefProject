@@ -4,9 +4,11 @@ import { Eye, EyeOff, BookOpen, Sparkles, GraduationCap, User } from "lucide-rea
 import { useApp } from "./store";
 import { authService } from "./services";
 import { toast } from "sonner";
+import { useT } from "./useT";
 
 export default function Login() {
   const { login } = useApp();
+  const { t } = useT();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,7 +23,7 @@ export default function Login() {
     try {
       const user = await authService.login(e ?? email, p ?? password);
       login(user);
-      toast.success(`Mirë se erdhe, ${user.name}!`);
+      toast.success(t("login.welcome", { name: user.name }));
       navigate(user.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard");
     } catch (err: any) {
       setError(err.message);
@@ -34,139 +36,138 @@ export default function Login() {
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
-      {/* Left */}
-      <div className="hidden lg:flex flex-col bg-primary p-12 text-primary-foreground relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary via-primary to-[#5B52C7] pointer-events-none" />
+      <div className="hidden lg:flex flex-col bg-primary p-10 xl:p-14 text-primary-foreground relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary via-[#5B4FE8] to-[#4338CA] pointer-events-none" />
+        <div className="absolute -bottom-20 -right-20 w-80 h-80 rounded-full bg-white/5 pointer-events-none" />
         <div className="relative z-10 flex flex-col h-full">
-          <Link to="/" className="flex items-center gap-3 mb-12">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-              <span className="text-white font-bold text-lg">L</span>
+          <Link to="/" className="flex items-center gap-3 mb-14">
+            <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center">
+              <span className="text-white font-extrabold text-xl">L</span>
             </div>
-            <span className="font-bold text-xl">LexoLehtë AI</span>
+            <span className="font-extrabold text-xl tracking-tight">LexoLehtë AI</span>
           </Link>
 
           <div className="flex-1 flex flex-col justify-center">
-            <Sparkles size={40} className="text-white/60 mb-6" />
-            <h1 className="text-4xl font-bold leading-tight mb-4">
-              Çdo tekst, në nivelin<br />e duhur për çdo nxënës.
+            <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center mb-6">
+              <Sparkles size={24} />
+            </div>
+            <h1 className="text-3xl xl:text-4xl font-extrabold leading-tight mb-4 tracking-tight">
+              {t("login.tagline")}
             </h1>
-            <p className="text-primary-foreground/80 text-lg leading-relaxed">
-              Adaptoni materialet mësimore me AI dhe mbështetini nxënësit që kanë vështirësi me leximin.
+            <p className="text-primary-foreground/85 text-base xl:text-lg leading-relaxed max-w-md">
+              {t("login.desc")}
             </p>
 
-            <div className="mt-10 space-y-4">
+            <div className="mt-10 space-y-3">
               {[
-                { icon: BookOpen, text: "Thjeshtëson çdo material automatikisht" },
-                { icon: GraduationCap, text: "Krijon kuize dhe fjalor të personalizuar" },
-                { icon: Sparkles, text: "Gjurmon progresin e çdo nxënësi" },
+                { icon: BookOpen, text: t("login.feat1") },
+                { icon: GraduationCap, text: t("login.feat2") },
+                { icon: Sparkles, text: t("login.feat3") },
               ].map(item => (
                 <div key={item.text} className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
+                  <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
                     <item.icon size={16} />
                   </div>
-                  <span className="text-sm text-primary-foreground/90">{item.text}</span>
+                  <span className="text-sm font-medium text-primary-foreground/90">{item.text}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="mt-auto">
-            <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-sm">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold">A</div>
+          <div className="mt-auto pt-10">
+            <div className="bg-white/10 rounded-2xl p-5 backdrop-blur-sm border border-white/10">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold">A</div>
                 <div>
-                  <p className="text-sm font-semibold">Arta Osmani</p>
+                  <p className="text-sm font-bold">Arta Osmani</p>
                   <p className="text-xs text-primary-foreground/70">Mësuese e Biologjisë</p>
                 </div>
               </div>
-              <p className="text-sm text-primary-foreground/80 italic">
-                "LexoLehtë AI kurseni orë pune dhe nxënësit e mi tani lexojnë me shumë kënaqësi."
+              <p className="text-sm text-primary-foreground/85 leading-relaxed">
+                "Kursen orë pune — dhe nxënësit e mi lexojnë me më shumë kënaqësi."
               </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Right */}
       <div className="flex flex-col items-center justify-center p-6 sm:p-10 bg-background">
         <div className="w-full max-w-sm">
-          <div className="lg:hidden flex items-center gap-2 mb-8">
-            <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center">
-              <span className="text-white font-bold text-sm">L</span>
+          <div className="lg:hidden flex items-center gap-2.5 mb-8">
+            <div className="w-9 h-9 rounded-2xl bg-primary flex items-center justify-center">
+              <span className="text-white font-extrabold text-sm">L</span>
             </div>
-            <span className="font-bold">LexoLehtë AI</span>
+            <span className="font-extrabold">LexoLehtë AI</span>
           </div>
 
-          <h2 className="text-2xl font-bold text-foreground mb-1">Hyr në llogari</h2>
-          <p className="text-muted-foreground text-sm mb-7">Përdor llogarinë tënde ose provo me llogari demonstruese.</p>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-foreground mb-2 tracking-tight">{t("login.title")}</h2>
+          <p className="text-muted-foreground text-sm mb-8">{t("login.subtitle")}</p>
 
-          {/* Demo buttons */}
-          <div className="grid grid-cols-2 gap-2.5 mb-5">
+          <div className="grid grid-cols-2 gap-3 mb-6">
             <button onClick={() => doLogin("mesuesi@lexolehte.com", "demo123")} disabled={loading}
-              className="flex flex-col items-center gap-1.5 p-3.5 rounded-2xl border-2 border-primary/20 bg-primary/5 hover:bg-primary/10 hover:border-primary/40 transition-all text-sm font-medium text-primary">
-              <GraduationCap size={20} />
-              Provo si Mësuese
+              className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-primary/20 bg-primary/5 hover:bg-primary/10 hover:border-primary/40 transition-all text-sm font-bold text-primary min-h-[5.5rem]">
+              <GraduationCap size={22} />
+              {t("login.asTeacher")}
             </button>
             <button onClick={() => doLogin("nxenesi@lexolehte.com", "demo123")} disabled={loading}
-              className="flex flex-col items-center gap-1.5 p-3.5 rounded-2xl border-2 border-success/25 bg-success-muted hover:bg-success-muted/80 hover:border-success/40 transition-all text-sm font-medium text-success-muted-foreground">
-              <User size={20} />
-              Provo si Nxënës
+              className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-success/25 bg-success-muted hover:border-success/40 transition-all text-sm font-bold text-success-muted-foreground min-h-[5.5rem]">
+              <User size={22} />
+              {t("login.asStudent")}
             </button>
           </div>
 
-          <div className="flex items-center gap-3 mb-5">
+          <div className="flex items-center gap-3 mb-6">
             <div className="flex-1 h-px bg-border" />
-            <span className="text-xs text-muted-foreground">ose</span>
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("login.or")}</span>
             <div className="flex-1 h-px bg-border" />
           </div>
 
           <form onSubmit={handleSubmit} noValidate className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-foreground mb-1.5">Email</label>
+              <label htmlFor="email" className="block mb-2">{t("login.email")}</label>
               <input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)}
                 placeholder="emri@shembull.com" required autoComplete="email"
-                className="w-full bg-input-background border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all text-foreground placeholder:text-muted-foreground" />
+                className="ui-input" />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1.5">Fjalëkalimi</label>
+              <label htmlFor="password" className="block mb-2">{t("login.password")}</label>
               <div className="relative">
                 <input id="password" type={showPw ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••" required autoComplete="current-password"
-                  className="w-full bg-input-background border border-border rounded-xl px-4 py-2.5 pr-11 text-sm outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all text-foreground placeholder:text-muted-foreground" />
+                  className="ui-input pr-12" />
                 <button type="button" onClick={() => setShowPw(!showPw)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors" aria-label={showPw ? "Fshih fjalëkalimin" : "Shfaq fjalëkalimin"}>
-                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg" aria-label={showPw ? t("login.hidePw") : t("login.showPw")}>
+                  {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
+            <div className="flex items-center justify-between gap-2">
+              <label className="flex items-center gap-2 cursor-pointer min-h-10">
                 <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)}
                   className="w-4 h-4 rounded accent-primary" />
-                <span className="text-sm text-muted-foreground">Mbaj mend</span>
+                <span className="text-sm text-muted-foreground font-medium">{t("login.remember")}</span>
               </label>
-              <button type="button" className="text-sm text-primary hover:underline">Harrove fjalëkalimin?</button>
+              <button type="button" className="text-sm font-semibold text-primary hover:underline min-h-10">{t("login.forgot")}</button>
             </div>
 
             {error && (
-              <div role="alert" className="bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-xl p-3">
+              <div role="alert" className="bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-2xl p-3.5 font-medium">
                 {error}
               </div>
             )}
 
-            <button type="submit" disabled={loading}
-              className="w-full bg-primary text-primary-foreground font-semibold py-2.5 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2 mt-1">
+            <button type="submit" disabled={loading} className="ui-btn-primary w-full mt-2">
               {loading ? (
-                <><div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" /> Duke hyrë...</>
-              ) : "Hyr"}
+                <><div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" /> {t("login.signingIn")}</>
+              ) : t("login.signIn")}
             </button>
           </form>
 
-          <div className="mt-5 p-3.5 bg-muted rounded-xl text-xs text-muted-foreground space-y-0.5">
-            <p><span className="font-medium">Mësuese:</span> mesuesi@lexolehte.com · demo123</p>
-            <p><span className="font-medium">Nxënës:</span> nxenesi@lexolehte.com · demo123</p>
+          <div className="mt-6 p-4 bg-muted/80 rounded-2xl text-xs text-muted-foreground space-y-1 border border-border">
+            <p><span className="font-bold text-foreground">{t("login.demoTeacher")}</span> mesuesi@lexolehte.com · demo123</p>
+            <p><span className="font-bold text-foreground">{t("login.demoStudent")}</span> nxenesi@lexolehte.com · demo123</p>
           </div>
         </div>
       </div>

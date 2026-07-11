@@ -1,39 +1,272 @@
-﻿import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router";
-import { ChevronLeft, ChevronRight, Lightbulb, RotateCcw, X, Check } from "lucide-react";
-import { assignmentService, gamificationService, materialService } from "./services";
+import { ChevronLeft, ChevronRight, Lightbulb, RotateCcw, X, Check, Sparkles, Loader2, Headphones, Volume2, ImageIcon } from "lucide-react";
+import { aiService, gamificationService, learningService, materialService, assignmentService, studentService } from "./services";
+import { trackLearningEvent } from "./learningTracker";
 import { useApp } from "./store";
 import { toast } from "sonner";
-import type { Material } from "./types";
+import type { Material, QuizQuestion, WrongQuestionDetail, Student } from "./types";
+import { useT } from "./useT";
+
+function isCorrectAnswer(q: QuizQuestion, ans: unknown): boolean {
+  if (q.type === "short" || q.type === "mainidea" || !q.options?.length) {
+    return String(ans ?? "").toLowerCase().includes(String(q.correct).toLowerCase());
+  }
+  return ans === q.correct;
+}
+
+function formatAnswer(q: QuizQuestion, ans: unknown): string {
+  if (q.type === "short" || q.type === "mainidea" || !q.options?.length) return String(ans ?? "");
+  if (typeof ans === "number" && q.options?.[ans] != null) return q.options[ans];
+  return String(ans ?? "");
+}
+
+function formatCorrect(q: QuizQuestion): string {
+  if (q.type === "short" || q.type === "mainidea" || !q.options?.length) return String(q.correct);
+  if (typeof q.correct === "number" && q.options?.[q.correct] != null) return q.options[q.correct];
+  return String(q.correct);
+}
+
+function isPracticeQuestion(q: QuizQuestion | undefined): boolean {
+  return Boolean(q?.id?.startsWith("easy-"));
+}
 
 export default function Quiz() {
   const { id } = useParams<{ id: string }>();
   const { user } = useApp();
+  const { t } = useT();
   const navigate = useNavigate();
 
   const [material, setMaterial] = useState<Material | null>(null);
   const [loading, setLoading] = useState(true);
   const [assignmentId, setAssignmentId] = useState<string | null>(null);
+  const [queue, setQueue] = useState<QuizQuestion[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [showHint, setShowHint] = useState(false);
+  const [hintCount, setHintCount] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [feedback, setFeedback] = useState("");
+  const [aiHelp, setAiHelp] = useState<{ explanation: string; newExample: string } | null>(null);
+  const [adapting, setAdapting] = useState(false);
   const [done, setDone] = useState(false);
   const [score, setScore] = useState(0);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState("");
+  const [resultAssignmentId, setResultAssignmentId] = useState<string | null>(null);
+  const wrongRef = React.useRef<WrongQuestionDetail[]>([]);
+  const [coreIds, setCoreIds] = useState<Set<string>>(new Set());
+  const [coreTotal, setCoreTotal] = useState(0);
+  const easyInsertedRef = React.useRef(0);
+  const [studentProfile, setStudentProfile] = useState<Student | null>(null);
+  const visualMode = Boolean(studentProfile?.visualPreferred);
+
+  // Audio + illustration support for reading difficulties
+  const [questionAudioLoading, setQuestionAudioLoading] = useState(false);
+  const [helpAudioLoading, setHelpAudioLoading] = useState(false);
+  const [playingKind, setPlayingKind] = useState<"question" | "help" | null>(null);
+  const [questionImage, setQuestionImage] = useState<string | null>(null);
+  const [questionImageLoading, setQuestionImageLoading] = useState(false);
+  const [helpImage, setHelpImage] = useState<string | null>(null);
+  const [helpImageLoading, setHelpImageLoading] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const imageCacheRef = useRef<Map<string, string>>(new Map());
+  const audioCacheRef = useRef<Map<string, string>>(new Map());
+  const autoVisualRef = useRef<string | null>(null);
+  /** Bumps on stop so in-flight playText() calls never resume audio. */
+  const playSessionRef = useRef(0);
+
+  const stopAudio = useCallback(() => {
+    playSessionRef.current += 1;
+    const a = audioRef.current;
+    if (a) {
+      a.onended = null;
+      a.onerror = null;
+      a.pause();
+      a.removeAttribute("src");
+      a.load();
+    }
+    setPlayingKind(null);
+    setQuestionAudioLoading(false);
+    setHelpAudioLoading(false);
+  }, []);
+
+  const playText = useCallback(async (text: string, kind: "question" | "help") => {
+    const clean = text.replace(/\s+/g, " ").trim();
+    if (!clean) return;
+
+    stopAudio();
+    const session = playSessionRef.current;
+    const setLoading = kind === "question" ? setQuestionAudioLoading : setHelpAudioLoading;
+    setLoading(true);
+    try {
+      let url = audioCacheRef.current.get(clean);
+      if (!url) {
+        url = await aiService.generateAudio(clean);
+        audioCacheRef.current.set(clean, url);
+      }
+      // User moved on / stopped while TTS was generating
+      if (session !== playSessionRef.current) return;
+
+      const audio = audioRef.current ?? new Audio();
+      audioRef.current = audio;
+      audio.pause();
+      audio.src = url;
+      audio.onended = () => {
+        if (session === playSessionRef.current) setPlayingKind(null);
+      };
+      audio.onerror = () => {
+        if (session !== playSessionRef.current) return;
+        setPlayingKind(null);
+        toast.error("Nuk u luajt audio.");
+      };
+      setPlayingKind(kind);
+      await audio.play();
+      if (session !== playSessionRef.current) {
+        audio.pause();
+      }
+    } catch (err) {
+      if (session !== playSessionRef.current) return;
+      const message = err instanceof Error ? err.message : "Nuk u gjenerua audio.";
+      toast.error(message);
+      setPlayingKind(null);
+    } finally {
+      if (session === playSessionRef.current) setLoading(false);
+    }
+  }, [stopAudio]);
 
   useEffect(() => {
     if (!id) return;
     (async () => {
       const m = await materialService.getById(id);
       setMaterial(m ?? null);
+      if (m) {
+        setQueue(m.quiz);
+        setCoreIds(new Set(m.quiz.map(q => q.id)));
+        setCoreTotal(m.quiz.length);
+      }
       if (m && user) {
-        const asgn = await assignmentService.getByMaterialForStudent(m.id, user.id);
+        const [asgn, stu] = await Promise.all([
+          assignmentService.getByMaterialForStudent(m.id, user.id),
+          studentService.getById(user.id),
+        ]);
         if (asgn) setAssignmentId(asgn.id);
+        setStudentProfile(stu ?? null);
       }
       setLoading(false);
     })();
   }, [id, user]);
+
+  const loadQuestionImage = useCallback(async (question: QuizQuestion, mat: Material) => {
+    const cacheKey = question.id;
+    const cached = imageCacheRef.current.get(cacheKey);
+    if (cached) {
+      setQuestionImage(cached);
+      return;
+    }
+    setQuestionImageLoading(true);
+    try {
+      const prompt = `${mat.subject || "school"}: ${question.question}. Topic: ${mat.title}. Simple visual that helps a child understand the idea.`;
+      const url = await aiService.generateIllustration(prompt);
+      imageCacheRef.current.set(cacheKey, url);
+      setQuestionImage(url);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Nuk u gjenerua figura.";
+      toast.error(message);
+      setQuestionImage(null);
+    } finally {
+      setQuestionImageLoading(false);
+    }
+  }, []);
+
+  // Reset visual aids when question changes; auto-load figure for visual learners
+  useEffect(() => {
+    const question = queue[currentIdx];
+    stopAudio();
+    setHelpImage(null);
+    setHelpImageLoading(false);
+
+    if (!question || !material) {
+      setQuestionImage(null);
+      setQuestionImageLoading(false);
+      return;
+    }
+
+    const cached = imageCacheRef.current.get(question.id);
+    if (cached) {
+      setQuestionImage(cached);
+      setQuestionImageLoading(false);
+      return;
+    }
+
+    setQuestionImage(null);
+    if (visualMode && autoVisualRef.current !== question.id) {
+      autoVisualRef.current = question.id;
+      void loadQuestionImage(question, material);
+    } else {
+      setQuestionImageLoading(false);
+    }
+  }, [queue[currentIdx]?.id, material, visualMode, stopAudio, loadQuestionImage, queue, currentIdx]);
+
+  useEffect(() => () => {
+    stopAudio();
+  }, [stopAudio]);
+
+  const requestQuestionImage = async () => {
+    const question = queue[currentIdx];
+    if (!question || !material || questionImageLoading) return;
+    await loadQuestionImage(question, material);
+  };
+
+  const requestHelpImage = async (explanation?: string, example?: string) => {
+    const question = queue[currentIdx];
+    if (!question || !material || helpImageLoading) return;
+    const exp = explanation ?? aiHelp?.explanation;
+    if (!exp) return;
+    setHelpImageLoading(true);
+    try {
+      const url = await aiService.generateIllustration(
+        `Help a child understand: ${exp}. Example: ${example || aiHelp?.newExample || question.question}. Topic ${material.title}.`
+      );
+      setHelpImage(url);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Nuk u gjenerua figura.";
+      toast.error(message);
+      setHelpImage(null);
+    } finally {
+      setHelpImageLoading(false);
+    }
+  };
+
+  const coreQuestions = useMemo(
+    () => queue.filter(q => coreIds.has(q.id)),
+    [queue, coreIds]
+  );
+
+  const ensureAssignment = async (): Promise<string | null> => {
+    if (!user || !material) return null;
+    if (assignmentId) return assignmentId;
+    const existing = await assignmentService.getByMaterialForStudent(material.id, user.id);
+    if (existing) {
+      setAssignmentId(existing.id);
+      return existing.id;
+    }
+    const today = new Date().toISOString().split("T")[0];
+    const deadline = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const created = await assignmentService.create({
+      materialId: material.id,
+      studentId: user.id,
+      deadline,
+      startDate: today,
+      allowRetry: true,
+      showAnswers: true,
+      enableAudio: true,
+      status: "in-progress",
+      attempts: 0,
+    });
+    setAssignmentId(created.id);
+    return created.id;
+  };
 
   if (loading) {
     return (
@@ -43,118 +276,284 @@ export default function Quiz() {
     );
   }
 
-  if (!material || material.quiz.length === 0) {
+  if (!material || queue.length === 0) {
     return (
       <div className="text-center py-20">
         <p className="text-muted-foreground">Kuizi nuk u gjet për këtë material.</p>
-        <button onClick={() => navigate(-1)} className="mt-4 text-primary hover:underline text-sm">← Kthehu</button>
+        <button onClick={() => navigate(-1)} className="mt-4 text-primary hover:underline text-sm">{t("quiz.back")}</button>
       </div>
     );
   }
 
-  const questions = material.quiz;
-  const q = questions[currentIdx];
+  const q = queue[currentIdx];
+  const practice = isPracticeQuestion(q);
+  const hasOptions = Boolean(q?.options && q.options.length > 0);
   const userAnswer = answers[q?.id];
-  const isAnswered = userAnswer !== undefined;
+  const isAnswered = userAnswer !== undefined && String(userAnswer).trim() !== "";
+  const answeredCorrect = q ? isCorrectAnswer(q, userAnswer) : false;
 
-  const handleAnswer = (ans: any) => {
+  // Progress against the original N questions (e.g. 8), not adaptive extras
+  const corePassed = queue.slice(0, currentIdx).filter(x => coreIds.has(x.id)).length;
+  const displayCurrent = practice ? Math.min(corePassed, coreTotal) : Math.min(corePassed + 1, coreTotal || 1);
+  const displayTotal = coreTotal || coreQuestions.length || 1;
+  const progressPct = Math.min(
+    100,
+    Math.round(((corePassed + (submitted && !practice ? 1 : 0)) / displayTotal) * 100)
+  );
+
+  const handleAnswer = (ans: unknown) => {
     if (submitted) return;
     setAnswers(prev => ({ ...prev, [q.id]: ans }));
   };
 
-  const submitAnswer = () => {
-    if (!isAnswered || submitted) return;
-    const isCorrect = q.type === "short"
-      ? String(userAnswer).toLowerCase().includes(String(q.correct).toLowerCase())
-      : userAnswer === q.correct;
+  const openHint = () => {
+    setShowHint(h => {
+      if (!h && user && material) {
+        setHintCount(c => c + 1);
+        trackLearningEvent({
+          studentId: user.id,
+          materialId: material.id,
+          assignmentId: assignmentId ?? undefined,
+          type: "hint",
+          detail: q.id,
+        });
+      }
+      return !h;
+    });
+  };
+
+  const submitAnswer = async () => {
+    if (!isAnswered || submitted || !q) return;
+    const correct = isCorrectAnswer(q, userAnswer);
     setSubmitted(true);
-    setFeedback(isCorrect ? "Saktë! " + q.feedback : q.feedback);
+
+    if (user && material) {
+      trackLearningEvent({
+        studentId: user.id,
+        materialId: material.id,
+        assignmentId: assignmentId ?? undefined,
+        type: correct ? "quiz_correct" : "quiz_wrong",
+        detail: q.id,
+      });
+    }
+
+    if (correct) {
+      setFeedback(t("quiz.correct") + " " + (q.feedback || ""));
+      setAiHelp(null);
+      return;
+    }
+
+    const wrong: WrongQuestionDetail = {
+      questionId: q.id,
+      question: q.question,
+      studentAnswer: formatAnswer(q, userAnswer),
+      correctAnswer: formatCorrect(q),
+    };
+    wrongRef.current = [...wrongRef.current, wrong];
+    setFeedback(q.feedback || t("quiz.lookTogether"));
+    setAdapting(true);
+    try {
+      const help = await aiService.explainWrongAnswer({
+        question: q.question,
+        studentAnswer: wrong.studentAnswer,
+        correctAnswer: wrong.correctAnswer,
+        topic: material.title,
+        visualPreferred: visualMode,
+      });
+      setAiHelp(help);
+
+      // Visual learners get helper figure automatically (audio stays on-demand via Dëgjo)
+      if (visualMode) {
+        void requestHelpImage(help.explanation, help.newExample);
+      }
+
+      // Max 2 practice questions total — don't turn an 8-question quiz into 10+
+      const canInsertPractice =
+        coreIds.has(q.id) &&
+        !practice &&
+        easyInsertedRef.current < 2;
+
+      if (canInsertPractice) {
+        const easier = await aiService.generateEasierQuestion({
+          original: q,
+          topic: material.title,
+          subject: material.subject,
+          visualPreferred: visualMode,
+        });
+        easyInsertedRef.current += 1;
+        setQueue(prev => {
+          const next = [...prev];
+          next.splice(currentIdx + 1, 0, easier);
+          return next;
+        });
+        toast.message("Praktikë e shkurtër e shtuar (nuk numërohet në 8 pyetjet).");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Nuk u gjenerua ndihma e AI.";
+      setAiHelp({ explanation: message, newExample: "" });
+    } finally {
+      setAdapting(false);
+    }
   };
 
   const next = () => {
-    if (currentIdx < questions.length - 1) {
+    if (currentIdx < queue.length - 1) {
       setCurrentIdx(i => i + 1);
       setSubmitted(false);
       setFeedback("");
+      setAiHelp(null);
+      setHelpImage(null);
       setShowHint(false);
+      stopAudio();
     } else {
-      finishQuiz();
+      void finishQuiz();
     }
+  };
+
+  const buildQuestionSpeech = () => {
+    if (!q) return "";
+    const opts = hasOptions && q.options
+      ? q.options.map((o, i) => `${String.fromCharCode(65 + i)}. ${o}`).join(". ")
+      : "";
+    return [q.question, opts].filter(Boolean).join(". ");
+  };
+
+  const toggleQuestionAudio = () => {
+    if (playingKind === "question") {
+      stopAudio();
+      return;
+    }
+    void playText(buildQuestionSpeech(), "question");
+  };
+
+  const toggleHelpAudio = () => {
+    if (!aiHelp) return;
+    if (playingKind === "help") {
+      stopAudio();
+      return;
+    }
+    const helpSpeech = [aiHelp.explanation, aiHelp.newExample].filter(Boolean).join(". ");
+    void playText(helpSpeech, "help");
   };
 
   const finishQuiz = async () => {
     let correct = 0;
-    questions.forEach(question => {
-      const ans = answers[question.id];
-      const isCorrect = question.type === "short"
-        ? String(ans ?? "").toLowerCase().includes(String(question.correct).toLowerCase())
-        : ans === question.correct;
-      if (isCorrect) correct++;
+    coreQuestions.forEach(question => {
+      if (isCorrectAnswer(question, answers[question.id])) correct++;
     });
-    const pct = Math.round((correct / questions.length) * 100);
+    const denom = Math.max(1, coreQuestions.length);
+    const pct = Math.round((correct / denom) * 100);
     setScore(pct);
     setDone(true);
+    setAnalyzeError("");
+    setAnalyzing(true);
 
-    if (assignmentId) {
-      await assignmentService.complete(assignmentId, pct, 0, false);
+    let asgnId: string | null = null;
+    try {
+      asgnId = await ensureAssignment();
+      setResultAssignmentId(asgnId);
+
+      if (user && asgnId) {
+        const asgn = await assignmentService.getById(asgnId);
+        await learningService.runPostLessonAnalysis({
+          studentId: user.id,
+          materialId: material.id,
+          assignmentId: asgnId,
+          score: pct,
+          attempts: (asgn?.attempts ?? 0) + 1,
+          wrongQuestions: wrongRef.current,
+          hintCount,
+        });
+        toast.success("Raporti AI u dërgua te mësuesja!");
+      } else if (user && !asgnId) {
+        setAnalyzeError("Nuk u krijua detyra — raporti nuk u ruajt.");
+        toast.error("Nuk u ruajt raporti. Provo sërish.");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Analiza AI dështoi.";
+      setAnalyzeError(message);
+      toast.error(message);
+      if (asgnId) {
+        try {
+          await assignmentService.complete(asgnId, pct, 0, false);
+        } catch { /* ignore */ }
+      }
+    } finally {
+      setAnalyzing(false);
     }
 
     if (user) {
-      await gamificationService.awardXP(user.id, 20, `Plotësoi kuizin e '${material.title}'`, "quiz", material.id);
-      if (pct >= 80) {
-        await gamificationService.awardXP(user.id, 20, `Rezultat mbi 80% në '${material.title}'`, "quiz", material.id);
-        toast.success("Shkëlqyer! +20 Yje shtesë për rezultatin mbi 80%!");
-      }
-      toast.success(`+20 Yje për plotësimin e kuizit!`);
+      try {
+        await gamificationService.awardXP(user.id, 20, `Plotësoi kuizin e '${material.title}'`, "quiz", material.id);
+        if (pct >= 80) {
+          await gamificationService.awardXP(user.id, 20, `Rezultat mbi 80% në '${material.title}'`, "quiz", material.id);
+        }
+      } catch { /* ignore xp errors */ }
+    }
+
+    // Always take student to the full AI report page when we have an assignment
+    if (asgnId) {
+      navigate(`/student/results/${asgnId}`, { replace: true });
     }
   };
 
   if (done) {
     return (
       <div className="max-w-lg mx-auto space-y-6 py-10">
-        <div className="bg-card border border-border rounded-2xl p-8 text-center">
-          <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center text-3xl font-bold mb-4 ${score >= 80 ? "bg-success-muted text-success-muted-foreground" : score >= 60 ? "bg-warning-muted text-warning-muted-foreground" : "bg-muted text-muted-foreground"}`}>
-            {score}%
-          </div>
-          <h1 className="text-2xl font-bold mb-2">
-            {score >= 80 ? "Punë e shkëlqyer!" : score >= 60 ? "Jo keq!" : "Ke bërë përpjekje!"}
-          </h1>
-          <p className="text-muted-foreground text-sm mb-6">
-            {score >= 80
-              ? "Ke kuptuar shumë mirë materialin."
-              : "Lexo materialin edhe njëherë dhe provo sërish."}
-          </p>
-
-          <div className="bg-muted/40 rounded-xl p-4 mb-6 grid grid-cols-2 gap-3 text-sm">
-            <div className="bg-success-muted rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold text-success-muted-foreground">
-                {questions.filter(q2 => {
-                  const ans = answers[q2.id];
-                  return q2.type === "short"
-                    ? String(ans ?? "").toLowerCase().includes(String(q2.correct).toLowerCase())
-                    : ans === q2.correct;
-                }).length}/{questions.length}
+        <div className="ui-card p-8 text-center">
+          {analyzing ? (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <Loader2 className="animate-spin text-primary" size={36} />
+              <p className="font-bold text-foreground">{t("quiz.preparingReport")}</p>
+              <p className="text-sm text-muted-foreground">{t("quiz.waitReport")}</p>
+            </div>
+          ) : (
+            <>
+              <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center text-3xl font-extrabold mb-4 ${score >= 80 ? "bg-success-muted text-success-muted-foreground" : score >= 60 ? "bg-warning-muted text-warning-muted-foreground" : "bg-muted text-muted-foreground"}`}>
+                {score}%
+              </div>
+              <h1 className="text-2xl font-extrabold mb-2">
+                {score >= 80 ? t("quiz.great") : score >= 60 ? t("quiz.ok") : t("quiz.tried")}
+              </h1>
+              <p className="text-muted-foreground text-sm mb-2">
+                {analyzeError
+                  ? "Rezultati u ruajt, por analiza AI pati problem."
+                  : t("quiz.reportSent")}
               </p>
-              <p className="text-xs text-success">Saktë</p>
-            </div>
-            <div className="bg-muted rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold">{questions.length}</p>
-              <p className="text-xs text-muted-foreground">Pyetje</p>
-            </div>
-          </div>
+              {analyzeError && (
+                <p className="text-xs text-destructive mb-4">{analyzeError}</p>
+              )}
+            </>
+          )}
 
-          <div className="flex flex-col gap-2">
-            {assignmentId && (
-              <Link to={`/student/results/${assignmentId}`}
-                className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors text-center">
-                Shiko rezultatet
-              </Link>
-            )}
-            <Link to="/student/dashboard"
-              className="w-full py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-muted transition-colors text-center">
-              Kthehu te paneli
-            </Link>
-          </div>
+          {!analyzing && (
+            <>
+              <div className="bg-muted/40 rounded-2xl p-4 mb-6 grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-success-muted rounded-xl p-3 text-center">
+                  <p className="text-2xl font-extrabold text-success-muted-foreground">
+                    {coreQuestions.filter(q2 => isCorrectAnswer(q2, answers[q2.id])).length}/{coreQuestions.length}
+                  </p>
+                  <p className="text-xs text-success font-semibold">{t("quiz.correctLabel")}</p>
+                </div>
+                <div className="bg-muted rounded-xl p-3 text-center">
+                  <p className="text-2xl font-extrabold">{displayTotal}</p>
+                  <p className="text-xs text-muted-foreground font-semibold">{t("quiz.questions")}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                {(resultAssignmentId || assignmentId) && (
+                  <Link to={`/student/results/${resultAssignmentId || assignmentId}`}
+                    className="ui-btn-primary w-full">
+                    {t("quiz.viewReport")}
+                  </Link>
+                )}
+                <Link to="/student/dashboard" className="ui-btn-secondary w-full">
+                  {t("quiz.backDashboard")}
+                </Link>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
@@ -163,37 +562,96 @@ export default function Quiz() {
   if (!q) return null;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5 py-4">
-      <div className="flex items-center justify-between">
-        <button onClick={() => navigate(`/student/read/${id}`)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-          <ChevronLeft size={16} /> Leximi
+    <div className="max-w-2xl mx-auto space-y-5 py-2 sm:py-4">
+      <div className="flex items-center justify-between gap-2">
+        <button onClick={() => navigate(`/student/read/${id}`)} className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground min-h-11">
+          <ChevronLeft size={16} /> {t("quiz.reading")}
         </button>
-        <p className="text-sm font-medium">{material.title}</p>
-        <span className="text-xs text-muted-foreground">{currentIdx + 1}/{questions.length}</span>
+        <p className="text-sm font-bold truncate max-w-[45%]">{material.title}</p>
+        <span className="text-xs font-bold text-muted-foreground tabular-nums">
+          {practice ? t("quiz.practice") : `${displayCurrent}/${displayTotal}`}
+        </span>
       </div>
 
-      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-        <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${((currentIdx + (submitted ? 1 : 0)) / questions.length) * 100}%` }} />
+      <div className="h-2 bg-muted rounded-full overflow-hidden">
+        <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${progressPct}%` }} />
       </div>
 
-      <div className="bg-card border border-border rounded-2xl p-6">
+      {visualMode && (
+        <div className="flex items-center gap-2 text-xs font-bold text-primary bg-primary/10 rounded-2xl px-4 py-2.5">
+          <ImageIcon size={14} /> {t("quiz.visualMode")}
+        </div>
+      )}
+
+      {practice && (
+        <div className="flex items-center gap-2 text-xs font-bold text-primary bg-primary/10 rounded-2xl px-4 py-2.5">
+          <Sparkles size={14} /> {t("quiz.easyPractice")}
+        </div>
+      )}
+
+      <div className="ui-card p-5 sm:p-7">
         <div className="flex items-start justify-between gap-3 mb-4">
-          <h2 className="font-semibold text-lg leading-snug">{q.question}</h2>
-          <button onClick={() => setShowHint(h => !h)}
-            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-colors ${showHint ? "bg-warning-muted text-warning-muted-foreground" : "border border-border hover:bg-muted"}`}>
-            <Lightbulb size={12} /> Ndihmë
-          </button>
+          <h2 className="font-extrabold text-lg sm:text-xl leading-snug tracking-tight flex-1">{q.question}</h2>
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            <button
+              type="button"
+              onClick={toggleQuestionAudio}
+              disabled={questionAudioLoading}
+              className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-2.5 rounded-2xl transition-colors min-h-11 ${
+                playingKind === "question" ? "bg-primary text-primary-foreground" : "border border-border hover:bg-muted text-primary"
+              }`}
+              aria-label={t("quiz.listen")}
+            >
+              {questionAudioLoading ? <Loader2 size={14} className="animate-spin" /> : <Headphones size={14} />}
+              {playingKind === "question" ? t("quiz.stop") : t("quiz.listen")}
+            </button>
+            <button
+              type="button"
+              onClick={() => void requestQuestionImage()}
+              disabled={questionImageLoading}
+              className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-2.5 rounded-2xl transition-colors min-h-11 ${
+                questionImage ? "bg-primary/10 text-primary border border-primary/20" : "border border-border hover:bg-muted text-foreground"
+              }`}
+              aria-label={t("quiz.figure")}
+            >
+              {questionImageLoading ? <Loader2 size={14} className="animate-spin" /> : <ImageIcon size={14} />}
+              {t("quiz.figure")}
+            </button>
+            <button onClick={openHint}
+              className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-2.5 rounded-2xl transition-colors min-h-11 ${showHint ? "bg-warning-muted text-warning-muted-foreground" : "border border-border hover:bg-muted"}`}>
+              <Lightbulb size={14} /> {t("quiz.help")}
+            </button>
+          </div>
         </div>
 
+        {/* Figure only when student requested it */}
+        {(questionImageLoading || questionImage) && (
+          <div className="mb-5 rounded-2xl overflow-hidden border border-border bg-muted/40 flex items-center justify-center">
+            {questionImageLoading && (
+              <div className="flex flex-col items-center gap-2 py-10 text-muted-foreground">
+                <Loader2 size={22} className="animate-spin text-primary" />
+                <span className="text-xs font-semibold">{t("quiz.creatingImage")}</span>
+              </div>
+            )}
+            {!questionImageLoading && questionImage && (
+              <img
+                src={questionImage}
+                alt={t("quiz.figure")}
+                className="w-full max-h-56 object-contain bg-white"
+              />
+            )}
+          </div>
+        )}
+
         {showHint && q.hint && (
-          <div className="bg-warning-muted border border-warning/20 rounded-xl p-3 mb-4 text-sm text-warning-muted-foreground">
+          <div className="bg-warning-muted border border-warning/20 rounded-xl p-3 mb-4 text-sm text-warning-muted-foreground font-medium">
             {q.hint}
           </div>
         )}
 
-        {q.type !== "short" && q.options && (
+        {hasOptions && (
           <div className="space-y-2.5">
-            {q.options.map((opt, i) => {
+            {q.options!.map((opt, i) => {
               const selected = userAnswer === i;
               const isCorrect = i === q.correct;
               let cls = "border-2 border-border hover:border-primary/30 hover:bg-primary/5";
@@ -204,11 +662,11 @@ export default function Quiz() {
 
               return (
                 <button key={i} onClick={() => handleAnswer(i)} disabled={submitted}
-                  className={`w-full text-left px-4 py-3.5 rounded-2xl transition-all text-sm font-medium flex items-center gap-3 ${cls}`}>
-                  <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center shrink-0 ${selected ? "border-primary bg-primary text-white" : "border-current"}`}>
+                  className={`w-full text-left px-4 py-4 rounded-2xl transition-all text-sm font-semibold flex items-center gap-3 min-h-14 ${cls}`}>
+                  <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center shrink-0 ${selected ? "border-primary bg-primary text-white" : "border-current"}`}>
                     {submitted && isCorrect ? <Check size={14} className="text-success" /> :
                      submitted && selected && !isCorrect ? <X size={14} className="text-destructive" /> :
-                     <span className="text-xs">{String.fromCharCode(65 + i)}</span>}
+                     <span className="text-xs font-bold">{String.fromCharCode(65 + i)}</span>}
                   </div>
                   {opt}
                 </button>
@@ -217,34 +675,109 @@ export default function Quiz() {
           </div>
         )}
 
-        {q.type === "short" && (
-          <input type="text" value={userAnswer ?? ""} onChange={e => handleAnswer(e.target.value)}
-            disabled={submitted} placeholder="Shkruaj përgjigjen tënde..."
-            className="w-full bg-input-background border-2 border-border rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all text-foreground placeholder:text-muted-foreground"
-            aria-label="Përgjigja jote" />
+        {!hasOptions && (
+          <input
+            type="text"
+            value={String(userAnswer ?? "")}
+            onChange={e => handleAnswer(e.target.value)}
+            disabled={submitted}
+            placeholder={t("quiz.writeAnswer")}
+            className="ui-input"
+            aria-label={t("quiz.writeAnswer")}
+          />
         )}
 
         {submitted && feedback && (
-          <div className={`mt-4 p-4 rounded-xl text-sm leading-relaxed ${userAnswer === q.correct || (q.type === "short" && String(userAnswer ?? "").toLowerCase().includes(String(q.correct).toLowerCase())) ? "bg-success-muted border border-success/25 text-success-muted-foreground" : "bg-warning-muted border border-warning/20 text-warning-muted-foreground"}`}>
+          <div className={`mt-4 p-4 rounded-xl text-sm leading-relaxed ${answeredCorrect ? "bg-success-muted border border-success/25 text-success-muted-foreground" : "bg-warning-muted border border-warning/20 text-warning-muted-foreground"}`}>
             {feedback}
+          </div>
+        )}
+
+        {adapting && (
+          <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 size={14} className="animate-spin" /> {t("quiz.aiExplaining")}
+          </div>
+        )}
+
+        {aiHelp && !answeredCorrect && (
+          <div className="mt-4 ai-bubble space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <p className="font-bold text-primary flex items-center gap-1.5 text-sm"><Sparkles size={14} /> {t("quiz.aiExplanation")}</p>
+              <button
+                type="button"
+                onClick={toggleHelpAudio}
+                disabled={helpAudioLoading}
+                className={`flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl transition-colors min-h-9 ${
+                  playingKind === "help" ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary hover:bg-primary/15"
+                }`}
+                aria-label={t("quiz.listen")}
+              >
+                {helpAudioLoading ? <Loader2 size={13} className="animate-spin" /> : <Volume2 size={13} />}
+                {playingKind === "help" ? t("quiz.stop") : t("quiz.listen")}
+              </button>
+            </div>
+            <p className="text-foreground leading-relaxed">{aiHelp.explanation}</p>
+            {aiHelp.newExample && (
+              <p className="text-muted-foreground"><span className="font-bold text-foreground">{t("quiz.example")}</span> {aiHelp.newExample}</p>
+            )}
+
+            {!helpImage && !helpImageLoading && (
+              <button
+                type="button"
+                onClick={() => void requestHelpImage()}
+                className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl bg-primary/10 text-primary hover:bg-primary/15 transition-colors min-h-9"
+              >
+                <ImageIcon size={13} /> {t("quiz.showHelper")}
+              </button>
+            )}
+
+            {(helpImageLoading || helpImage) && (
+              <div className="rounded-xl overflow-hidden border border-primary/15 bg-white flex items-center justify-center">
+                {helpImageLoading && (
+                  <div className="flex items-center gap-2 py-8 text-muted-foreground text-xs font-semibold">
+                    <Loader2 size={16} className="animate-spin text-primary" /> {t("quiz.creatingImage")}
+                  </div>
+                )}
+                {!helpImageLoading && helpImage && (
+                  <img src={helpImage} alt={t("quiz.figure")} className="w-full max-h-48 object-contain" />
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      <div className="flex justify-between">
-        <button onClick={() => { setCurrentIdx(0); setAnswers({}); setSubmitted(false); setFeedback(""); setShowHint(false); setDone(false); }}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-          <RotateCcw size={14} /> Rifillo
+      <div className="flex justify-between items-center gap-3">
+        <button onClick={() => {
+          setQueue(material.quiz);
+          setCoreIds(new Set(material.quiz.map(x => x.id)));
+          setCoreTotal(material.quiz.length);
+          setCurrentIdx(0);
+          setAnswers({});
+          setSubmitted(false);
+          setFeedback("");
+          setAiHelp(null);
+          setHelpImage(null);
+          setShowHint(false);
+          setDone(false);
+          wrongRef.current = [];
+          easyInsertedRef.current = 0;
+          setHintCount(0);
+          setAnalyzeError("");
+          stopAudio();
+        }}
+          className="ui-btn-ghost text-sm">
+          <RotateCcw size={14} /> {t("quiz.restart")}
         </button>
         {!submitted ? (
-          <button onClick={submitAnswer} disabled={!isAnswered}
-            className="flex items-center gap-2 bg-primary text-primary-foreground font-medium px-5 py-2.5 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50">
-            Kontrollo
+          <button onClick={() => void submitAnswer()} disabled={!isAnswered || adapting}
+            className="ui-btn-primary disabled:opacity-50">
+            {t("quiz.check")}
           </button>
         ) : (
-          <button onClick={next}
-            className="flex items-center gap-2 bg-primary text-primary-foreground font-medium px-5 py-2.5 rounded-xl hover:bg-primary/90 transition-colors">
-            {currentIdx < questions.length - 1 ? <>Vazhdo <ChevronRight size={16} /></> : "Përfundo"}
+          <button onClick={next} disabled={adapting}
+            className="ui-btn-primary disabled:opacity-50">
+            {currentIdx < queue.length - 1 ? <>{t("quiz.continue")} <ChevronRight size={16} /></> : t("quiz.finish")}
           </button>
         )}
       </div>

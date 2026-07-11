@@ -1,26 +1,26 @@
 import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router";
 import {
-  Upload, FileText, ChevronRight, ChevronLeft, Check, Wand2,
-  Users, Sliders, BookOpen, X, File,
+  Upload, ChevronRight, ChevronLeft, Check, Wand2,
+  X, File,
 } from "lucide-react";
 import { toast } from "sonner";
-import { materialService, aiService } from "./services";
+import { materialService, aiService, learningService, studentService } from "./services";
 import { MOCK_CLASSES, MOCK_STUDENTS } from "./mockData";
+import { useT } from "./useT";
 
-const STEPS = ["Ngarko materialin", "Zgjidh audiencën", "Adaptimi", "Konfirmimi"];
-
-const AI_STEPS = [
+const AI_STEPS_BASE = [
   "Duke analizuar materialin...",
   "Duke thjeshtësuar tekstin...",
   "Duke krijuar përmbledhjen...",
   "Duke identifikuar fjalët e vështira...",
   "Duke krijuar pyetjet...",
-  "Materiali është gati! ✓",
+  "Duke krijuar vizualizimet...",
 ];
 
 export default function MaterialCreate() {
   const navigate = useNavigate();
+  const { t } = useT();
   const [step, setStep] = useState(0);
   const [processing, setProcessing] = useState(false);
   const [aiStepIdx, setAiStepIdx] = useState(-1);
@@ -43,8 +43,34 @@ export default function MaterialCreate() {
   const [length, setLength] = useState("mesatar");
   const [numQ, setNumQ] = useState(5);
   const [switches, setSwitches] = useState({
-    summary: true, keyPoints: true, vocab: true, quiz: true, translate: false, audio: false, teacherNotes: true,
+    summary: true,
+    keyPoints: true,
+    vocab: true,
+    quiz: true,
+    translate: false,
+    audio: false,
+    teacherNotes: true,
+    visualizations: true,
   });
+
+  const STEPS = [t("mc.stepUpload"), t("mc.stepAudience"), t("mc.stepAdapt"), t("mc.stepConfirm")];
+  const AI_STEPS = [...AI_STEPS_BASE, t("mc.aiReady")];
+  const simplificationLabels = [t("mc.easy"), t("mc.medAdapt"), t("mc.advAdapt")];
+  const lengthOptions = [
+    { val: "shkurtër", label: t("mc.short") },
+    { val: "mesatar", label: t("mc.medium") },
+    { val: "gjatë", label: t("mc.long") },
+  ];
+  const switchLabels: Record<string, string> = {
+    summary: t("mc.summary"),
+    keyPoints: t("mc.keyPoints"),
+    vocab: t("mc.vocab"),
+    quiz: t("mc.quiz"),
+    translate: t("mc.translate"),
+    audio: t("mc.audio"),
+    teacherNotes: t("mc.teacherNotes"),
+    visualizations: t("mc.visuals"),
+  };
 
   const handleFile = async (f: File) => {
     setFile(f);
@@ -67,7 +93,7 @@ export default function MaterialCreate() {
     setSelectedStudents(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
   };
 
-  const studentsInClass = MOCK_STUDENTS.filter(s => {
+  const classStudents = MOCK_STUDENTS.filter(s => {
     const cls = MOCK_CLASSES.find(c => c.id === selectedClass);
     return cls && s.class === cls.name.replace("Klasa ", "");
   });
@@ -119,6 +145,29 @@ export default function MaterialCreate() {
     }, 1800);
 
     try {
+      const targetStudentIds =
+        audience === "student" && selectedStudents.length > 0
+          ? selectedStudents
+          : classStudents.map(s => s.id);
+
+      const hintSet = new Set<string>();
+      for (const sid of targetStudentIds) {
+        const [prof, stu] = await Promise.all([
+          learningService.getProfile(sid),
+          studentService.getById(sid),
+        ]);
+        if (stu?.visualPreferred) {
+          hintSet.add(
+            "Mëson më mirë me figura dhe ilustrime — përfshi shembuj vizualë, përshkrime konkrete dhe gjuhë që lehtëson imagjinimin e koncepteve."
+          );
+        }
+        if (!prof) continue;
+        [...prof.preferredFormats, ...prof.supportNeeds, ...prof.teacherRecommendations]
+          .filter(Boolean)
+          .forEach(h => hintSet.add(h));
+      }
+      const learnerHints = Array.from(hintSet).slice(0, 12);
+
       const adapted = await aiService.adaptMaterial({
         text: sourceText,
         title: finalTitle,
@@ -132,7 +181,43 @@ export default function MaterialCreate() {
         includeQuiz: switches.quiz,
         includeTeacherNotes: switches.teacherNotes,
         includeTranslation: switches.translate,
+        includeVisualizations: switches.visualizations,
+        learnerHints,
       });
+
+      let illustrations: string[] = [];
+      if (switches.visualizations) {
+        setAiStepIdx(Math.max(0, AI_STEPS.length - 2));
+        const prompts =
+          adapted.visualPrompts && adapted.visualPrompts.length > 0
+            ? adapted.visualPrompts
+            : [
+                `Educational illustration about ${finalTitle}. Subject: ${finalSubject}. Key idea: ${adapted.summary || adapted.keyPoints?.[0] || adapted.simplifiedText.slice(0, 180)}`,
+              ];
+        // One figure during create (localStorage quota); more can be added on demand in reading/quiz
+        const prompt = prompts[0];
+        try {
+          const url = await aiService.generateIllustration(prompt);
+          illustrations.push(url);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Gjenerimi i figurës dështoi.";
+          toast.error(`Vizualizimet: ${message}`);
+        }
+      }
+
+      let englishText = "";
+      if (switches.translate) {
+        try {
+          englishText =
+            (adapted.translation && adapted.translation.length > 40
+              ? adapted.translation
+              : await aiService.translateText(adapted.simplifiedText, "en")
+            ).trim();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Përkthimi dështoi.";
+          toast.error(`Përkthimi: ${message}`);
+        }
+      }
 
       window.clearInterval(progressTimer);
       setAiStepIdx(AI_STEPS.length - 1);
@@ -148,10 +233,25 @@ export default function MaterialCreate() {
         vocabulary: adapted.vocabulary,
         quiz: adapted.quiz,
         teacherNotes: adapted.teacherNotes,
+        englishText,
+        illustrations,
         estimatedMinutes: Math.max(10, Math.round(adapted.simplifiedText.split(/\s+/).length / 120) * 5),
       });
 
-      toast.success("Materiali u adaptua me sukses nga AI!");
+      try {
+        await aiService.generateFlashcards({
+          id: mat.id,
+          title: mat.title,
+          subject: mat.subject,
+          simplifiedText: mat.simplifiedText,
+          keyPoints: mat.keyPoints,
+          vocabulary: mat.vocabulary,
+        });
+      } catch {
+        // Flashcards are optional; material still succeeds
+      }
+
+      toast.success(t("mc.success"));
       await new Promise(r => setTimeout(r, 500));
       navigate(`/teacher/materials/${mat.id}/review`);
     } catch (err) {
@@ -163,13 +263,11 @@ export default function MaterialCreate() {
     }
   };
 
-  const simplificationLabels = ["Adaptim i lehtë", "Adaptim mesatar", "Adaptim i avancuar"];
-
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Krijo material të ri</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">Ngarko dhe adapto materialin mësimor me ndihmën e AI.</p>
+        <h1 className="text-2xl font-bold">{t("mc.title")}</h1>
+        <p className="text-muted-foreground text-sm mt-0.5">{t("mc.subtitle")}</p>
       </div>
 
       {/* Stepper */}
@@ -191,10 +289,10 @@ export default function MaterialCreate() {
       <div className="bg-card rounded-2xl border border-border p-6">
         {step === 0 && (
           <div className="space-y-4">
-            <h2 className="font-semibold text-lg">Ngarko materialin</h2>
+            <h2 className="font-semibold text-lg">{t("mc.stepUpload")}</h2>
             <div className="flex gap-2 mb-4">
-              {[{ id: "text", label: "Shkruaj / ngjit tekst" }, { id: "file", label: "Ngarko skedar" }].map(opt => (
-                <button key={opt.id} onClick={() => setInputMode(opt.id as any)}
+              {[{ id: "text", label: t("mc.typePaste") }, { id: "file", label: t("mc.uploadFile") }].map(opt => (
+                <button key={opt.id} onClick={() => setInputMode(opt.id as "text" | "file")}
                   className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${inputMode === opt.id ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"}`}>
                   {opt.label}
                 </button>
@@ -223,8 +321,8 @@ export default function MaterialCreate() {
                   </div>
                 ) : (
                   <>
-                    <p className="font-medium text-sm mb-1">Zvarrit skedarin këtu ose kliko</p>
-                    <p className="text-xs text-muted-foreground">PDF, Word, JPG, PNG · Maksimumi 10MB</p>
+                    <p className="font-medium text-sm mb-1">{t("mc.drag")}</p>
+                    <p className="text-xs text-muted-foreground">{t("mc.fileTypes")}</p>
                   </>
                 )}
                 <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.jpg,.png" className="hidden"
@@ -236,10 +334,10 @@ export default function MaterialCreate() {
 
         {step === 1 && (
           <div className="space-y-5">
-            <h2 className="font-semibold text-lg">Zgjidh audiencën</h2>
+            <h2 className="font-semibold text-lg">{t("mc.stepAudience")}</h2>
             <div className="grid grid-cols-2 gap-3">
-              {[{ id: "class", label: "Të gjithë klasën" }, { id: "student", label: "Nxënës të caktuar" }].map(opt => (
-                <button key={opt.id} onClick={() => setAudience(opt.id as any)}
+              {[{ id: "class", label: t("mc.wholeClass") }, { id: "student", label: t("mc.selectedStudents") }].map(opt => (
+                <button key={opt.id} onClick={() => setAudience(opt.id as "class" | "student")}
                   className={`py-3 rounded-xl text-sm font-medium border-2 transition-colors ${audience === opt.id ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/30"}`}>
                   {opt.label}
                 </button>
@@ -247,18 +345,18 @@ export default function MaterialCreate() {
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">Klasa</label>
+              <label className="text-sm font-medium mb-2 block">{t("common.class")}</label>
               <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)}
-                className="w-full bg-input-background border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/50 text-foreground" aria-label="Zgjidh klasën">
+                className="w-full bg-input-background border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/50 text-foreground" aria-label={t("common.class")}>
                 {MOCK_CLASSES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
 
             {audience === "student" && (
               <div>
-                <label className="text-sm font-medium mb-2 block">Zgjidh nxënës</label>
+                <label className="text-sm font-medium mb-2 block">{t("mc.selectStudents")}</label>
                 <div className="space-y-2">
-                  {studentsInClass.map(s => (
+                  {classStudents.map(s => (
                     <label key={s.id} className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-colors ${selectedStudents.includes(s.id) ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"}`}>
                       <input type="checkbox" checked={selectedStudents.includes(s.id)} onChange={() => toggleStudent(s.id)} className="accent-primary w-4 h-4" />
                       <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold">{s.name[0]}</div>
@@ -274,22 +372,22 @@ export default function MaterialCreate() {
 
         {step === 2 && (
           <div className="space-y-5">
-            <h2 className="font-semibold text-lg">Adaptimi</h2>
+            <h2 className="font-semibold text-lg">{t("mc.stepAdapt")}</h2>
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Titulli i materialit *</label>
+                <label className="text-sm font-medium mb-1.5 block">{t("mc.materialTitle")}</label>
                 <input value={title} onChange={e => setTitle(e.target.value)} placeholder="p.sh. Fotosinteza"
-                  className="w-full bg-input-background border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-foreground placeholder:text-muted-foreground" aria-label="Titulli" />
+                  className="w-full bg-input-background border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-foreground placeholder:text-muted-foreground" aria-label={t("mc.titleLabel")} />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Lënda *</label>
+                <label className="text-sm font-medium mb-1.5 block">{t("mc.subject")}</label>
                 <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="p.sh. Biologji"
-                  className="w-full bg-input-background border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-foreground placeholder:text-muted-foreground" aria-label="Lënda" />
+                  className="w-full bg-input-background border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-foreground placeholder:text-muted-foreground" aria-label={t("mc.subjectLabel")} />
               </div>
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">Niveli i thjeshtësimit</label>
+              <label className="text-sm font-medium mb-2 block">{t("mc.simpLevel")}</label>
               <div className="grid grid-cols-3 gap-2">
                 {simplificationLabels.map((label, i) => (
                   <button key={i} onClick={() => setLevel(i + 1)}
@@ -301,42 +399,35 @@ export default function MaterialCreate() {
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">Gjatësia e dëshiruar</label>
+              <label className="text-sm font-medium mb-2 block">{t("mc.length")}</label>
               <div className="flex gap-2">
-                {["shkurtër", "mesatar", "gjatë"].map(opt => (
-                  <button key={opt} onClick={() => setLength(opt)}
-                    className={`flex-1 py-2 rounded-xl text-xs font-medium border-2 transition-colors capitalize ${length === opt ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/30"}`}>
-                    {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                {lengthOptions.map(opt => (
+                  <button key={opt.val} onClick={() => setLength(opt.val)}
+                    className={`flex-1 py-2 rounded-xl text-xs font-medium border-2 transition-colors capitalize ${length === opt.val ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/30"}`}>
+                    {opt.label.charAt(0).toUpperCase() + opt.label.slice(1)}
                   </button>
                 ))}
               </div>
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">Numri i pyetjeve: {numQ}</label>
+              <label className="text-sm font-medium mb-2 block">{t("mc.numQuestions")}: {numQ}</label>
               <input type="range" min={3} max={10} value={numQ} onChange={e => setNumQ(Number(e.target.value))}
-                className="w-full accent-primary" aria-label="Numri i pyetjeve" />
+                className="w-full accent-primary" aria-label={t("mc.numQuestions")} />
             </div>
 
             <div>
-              <p className="text-sm font-medium mb-3">Elementet e gjenerimit</p>
+              <p className="text-sm font-medium mb-3">{t("mc.genElements")}</p>
               <div className="grid sm:grid-cols-2 gap-2.5">
-                {Object.entries(switches).map(([key, val]) => {
-                  const labels: Record<string, string> = {
-                    summary: "Krijon përmbledhje", keyPoints: "Pikat kryesore",
-                    vocab: "Fjalor i vështirë", quiz: "Kuiz",
-                    translate: "Përkthim", audio: "Audio", teacherNotes: "Shënime për mësuesen",
-                  };
-                  return (
-                    <label key={key} className={`flex items-center justify-between px-4 py-3 rounded-xl border-2 cursor-pointer transition-all ${val ? "border-primary/30 bg-primary/5" : "border-border"}`}>
-                      <span className="text-sm">{labels[key]}</span>
-                      <div onClick={() => setSwitches(prev => ({ ...prev, [key]: !prev[key as keyof typeof switches] }))}
-                        className={`w-10 h-5 rounded-full relative transition-colors ${val ? "bg-primary" : "bg-muted-foreground/30"}`} role="switch" aria-checked={val}>
-                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${val ? "left-5" : "left-0.5"}`} />
-                      </div>
-                    </label>
-                  );
-                })}
+                {Object.entries(switches).map(([key, val]) => (
+                  <label key={key} className={`flex items-center justify-between px-4 py-3 rounded-xl border-2 cursor-pointer transition-all ${val ? "border-primary/30 bg-primary/5" : "border-border"}`}>
+                    <span className="text-sm">{switchLabels[key]}</span>
+                    <div onClick={() => setSwitches(prev => ({ ...prev, [key]: !prev[key as keyof typeof switches] }))}
+                      className={`w-10 h-5 rounded-full relative transition-colors ${val ? "bg-primary" : "bg-muted-foreground/30"}`} role="switch" aria-checked={val}>
+                      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${val ? "left-5" : "left-0.5"}`} />
+                    </div>
+                  </label>
+                ))}
               </div>
             </div>
           </div>
@@ -344,16 +435,16 @@ export default function MaterialCreate() {
 
         {step === 3 && !processing && (
           <div className="space-y-4">
-            <h2 className="font-semibold text-lg">Konfirmimi</h2>
+            <h2 className="font-semibold text-lg">{t("mc.stepConfirm")}</h2>
             <div className="bg-warning-muted border border-warning/20 rounded-xl p-4 text-sm text-warning-muted-foreground">
-              Permbajtja e gjeneruar nga AI duhet të shqyrtohet nga mësuesi para publikimit.
+              {t("mc.aiReviewNote")}
             </div>
             <div className="bg-muted/40 rounded-xl p-4 space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Titulli</span><span className="font-medium">{title}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Lënda</span><span className="font-medium">{subject}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Thjeshtësimi</span><span className="font-medium">{simplificationLabels[level - 1]}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Pyetje</span><span className="font-medium">{numQ}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Audienca</span><span className="font-medium">{audience === "class" ? MOCK_CLASSES.find(c => c.id === selectedClass)?.name : `${selectedStudents.length} nxënës`}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t("mc.titleLabel")}</span><span className="font-medium">{title}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t("mc.subjectLabel")}</span><span className="font-medium">{subject}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t("mc.simpLabel")}</span><span className="font-medium">{simplificationLabels[level - 1]}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t("mc.questionsLabel")}</span><span className="font-medium">{numQ}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">{t("mc.audienceLabel")}</span><span className="font-medium">{audience === "class" ? MOCK_CLASSES.find(c => c.id === selectedClass)?.name : t("mc.studentsCount", { n: selectedStudents.length })}</span></div>
             </div>
           </div>
         )}
@@ -364,8 +455,8 @@ export default function MaterialCreate() {
               <Wand2 size={28} className="text-primary animate-pulse" />
             </div>
             <div>
-              <h2 className="font-semibold text-lg mb-1">AI po përpunon materialin...</h2>
-              <p className="text-sm text-muted-foreground">Ju lutemi prisni disa sekonda.</p>
+              <h2 className="font-semibold text-lg mb-1">{t("mc.processing")}</h2>
+              <p className="text-sm text-muted-foreground">{t("mc.wait")}</p>
             </div>
             <div className="space-y-2 max-w-xs mx-auto">
               {AI_STEPS.map((s, i) => (
@@ -386,17 +477,17 @@ export default function MaterialCreate() {
         <div className="flex items-center justify-between">
           <button onClick={() => step === 0 ? window.history.back() : setStep(step - 1)}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border hover:bg-muted transition-colors text-sm font-medium">
-            <ChevronLeft size={16} /> {step === 0 ? "Anulo" : "Prapa"}
+            <ChevronLeft size={16} /> {step === 0 ? t("common.cancel") : t("mc.back")}
           </button>
           {step < 3 ? (
             <button type="button" onClick={handleContinue} disabled={!canProceed()}
               className="flex items-center gap-2 bg-primary text-primary-foreground font-medium px-5 py-2.5 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:pointer-events-none">
-              Vazhdo <ChevronRight size={16} />
+              {t("mc.continue")} <ChevronRight size={16} />
             </button>
           ) : (
             <button type="button" onClick={runAI}
               className="flex items-center gap-2 bg-primary text-primary-foreground font-semibold px-6 py-2.5 rounded-xl hover:bg-primary/90 transition-colors shadow-lg shadow-primary/25">
-              <Wand2 size={16} /> Adapto me AI
+              <Wand2 size={16} /> {t("mc.adaptAI")}
             </button>
           )}
         </div>

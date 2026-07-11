@@ -6,6 +6,7 @@ import { gamificationService } from "./services";
 import { ALL_BADGES } from "./mockData";
 import type { StudentLevel, StudentBadge, BadgeProgress, Badge } from "./types";
 import { useApp } from "./store";
+import { useT } from "./useT";
 
 const rarityColors: Record<string, string> = {
   common: "bg-muted text-muted-foreground",
@@ -25,6 +26,7 @@ const categoryIcons: Record<string, React.ElementType> = {
 
 export default function StudentRewards() {
   const { user } = useApp();
+  const { t, lang } = useT();
   const [level, setLevel] = useState<StudentLevel | null>(null);
   const [studentBadges, setStudentBadges] = useState<StudentBadge[]>([]);
   const [progress, setProgress] = useState<BadgeProgress[]>([]);
@@ -65,8 +67,8 @@ export default function StudentRewards() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-2xl font-bold">Shpërblimet e mia</h1>
-        <p className="text-muted-foreground text-sm mt-0.5">Yjet, nivelet dhe titujt tuaj.</p>
+        <h1 className="text-2xl font-bold">{t("sr.title")}</h1>
+        <p className="text-muted-foreground text-sm mt-0.5">{t("sr.subtitle")}</p>
       </div>
 
       {/* Level card */}
@@ -80,23 +82,23 @@ export default function StudentRewards() {
               {level.level}
             </div>
             <div>
-              <p className="text-sm text-white/80">Niveli juaj aktual</p>
-              <p className="text-2xl font-bold">Niveli {level.level}</p>
+              <p className="text-sm text-white/80">{t("sr.currentLevel")}</p>
+              <p className="text-2xl font-bold">{t("sd.level", { n: level.level })}</p>
               <p className="text-sm text-white/80 inline-flex items-center gap-1.5">
-                <Star size={14} fill="currentColor" /> {level.totalXP} Yje totale
+                <Star size={14} fill="currentColor" /> {t("sr.totalStars", { n: level.totalXP })}
               </p>
             </div>
           </div>
           <div>
             <div className="flex justify-between text-xs text-white/70 mb-2">
-              <span className="inline-flex items-center gap-1"><Star size={10} fill="currentColor" /> {level.currentLevelXP} Yje</span>
-              <span className="inline-flex items-center gap-1"><Star size={10} fill="currentColor" /> {level.nextLevelXP} Yje (Niveli {level.level + 1})</span>
+              <span className="inline-flex items-center gap-1"><Star size={10} fill="currentColor" /> {level.currentLevelXP} {t("common.stars")}</span>
+              <span className="inline-flex items-center gap-1"><Star size={10} fill="currentColor" /> {level.nextLevelXP} {t("common.stars")} ({t("sd.level", { n: level.level + 1 })})</span>
             </div>
             <div className="h-3 bg-white/20 rounded-full overflow-hidden">
               <div className="h-full bg-white rounded-full transition-all" style={{ width: `${level.progressPercentage}%` }} />
             </div>
             <p className="text-xs text-white/70 mt-2 text-center">
-              Të duhen edhe {level.nextLevelXP - level.totalXP} Yje për Nivelin {level.level + 1}.
+              {t("sr.needMore", { n: level.nextLevelXP - level.totalXP, next: level.level + 1 })}
             </p>
           </div>
           <p className="mt-3 text-xs text-white/60 text-center italic">
@@ -108,12 +110,12 @@ export default function StudentRewards() {
       {/* Filters */}
       <div className="flex gap-2 overflow-x-auto pb-1">
         {[
-          { id: "all", label: "Të gjithë" },
-          { id: "reading", label: "Leximi" },
-          { id: "comprehension", label: "Kuptimi" },
-          { id: "vocabulary", label: "Fjalori" },
-          { id: "level", label: "Nivelet" },
-          { id: "teacher", label: "Mësuesja" },
+          { id: "all", label: t("common.all") },
+          { id: "reading", label: t("sr.reading") },
+          { id: "comprehension", label: t("sr.comprehension") },
+          { id: "vocabulary", label: t("sr.vocabulary") },
+          { id: "level", label: t("sr.levels") },
+          { id: "teacher", label: t("sr.teacher") },
         ].map(opt => (
           <button key={opt.id} onClick={() => setFilter(opt.id)}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-colors ${filter === opt.id ? "bg-primary text-primary-foreground" : "bg-card border border-border hover:bg-muted"}`}>
@@ -125,7 +127,7 @@ export default function StudentRewards() {
       {/* Earned badges */}
       {earnedBadges.length > 0 && (
         <div>
-          <h2 className="font-semibold mb-3">Titujt e mi</h2>
+          <h2 className="font-semibold mb-3">{t("sr.myTitles")}</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {filterBadges(earnedBadges).map(badge => {
               const earned = studentBadges.find(b => b.badgeId === badge.id);
@@ -144,10 +146,10 @@ export default function StudentRewards() {
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${rarityColors[badge.rarity]}`}>
                       {rarityLabels[badge.rarity]}
                     </span>
-                    {isTeacher && <span className="text-xs text-primary font-medium">Dhuruar nga mësuesja</span>}
+                    {isTeacher && <span className="text-xs text-primary font-medium">{t("sr.fromTeacher")}</span>}
                   </div>
                   {earned?.earnedAt && (
-                    <p className="text-xs text-muted-foreground mt-1.5">E fituar: {earned.earnedAt}</p>
+                    <p className="text-xs text-muted-foreground mt-1.5">{t("sr.earned")}: {earned.earnedAt}</p>
                   )}
                 </button>
               );
@@ -159,7 +161,7 @@ export default function StudentRewards() {
       {/* In progress */}
       {inProgressBadges.length > 0 && (
         <div>
-          <h2 className="font-semibold mb-3">Në progres</h2>
+          <h2 className="font-semibold mb-3">{t("sr.inProgress")}</h2>
           <div className="grid sm:grid-cols-2 gap-3">
             {inProgressBadges.slice(0, 4).map(badge => {
               const prog = progress.find(p => p.badgeId === badge.id);
@@ -190,7 +192,7 @@ export default function StudentRewards() {
       {/* Star History */}
       {xpHistory.length > 0 && (
         <div>
-          <h2 className="font-semibold mb-3">Historia e Yjeve</h2>
+          <h2 className="font-semibold mb-3">{t("sr.starHistory")}</h2>
           <div className="bg-card border border-border rounded-2xl divide-y divide-border overflow-hidden shadow-sm">
             {xpHistory.map(tx => (
               <div key={tx.id} className="flex items-center gap-3 px-5 py-3.5">
@@ -199,10 +201,10 @@ export default function StudentRewards() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-foreground">{tx.reason}</p>
-                  <p className="text-xs text-muted-foreground">{new Date(tx.createdAt).toLocaleDateString("sq-AL")}</p>
+                  <p className="text-xs text-muted-foreground">{new Date(tx.createdAt).toLocaleDateString(lang === "en" ? "en-US" : "sq-AL")}</p>
                 </div>
                 <span className="font-bold text-primary text-sm shrink-0 inline-flex items-center gap-1">
-                  <Star size={12} fill="currentColor" /> +{tx.amount} Yje
+                  <Star size={12} fill="currentColor" /> +{tx.amount} {t("common.stars")}
                 </span>
               </div>
             ))}
@@ -245,7 +247,7 @@ export default function StudentRewards() {
                   </div>
                   {selectedBadge.earned?.earnedAt && (
                     <div className="flex justify-between py-2 border-b border-border">
-                      <span className="text-muted-foreground">E fituar</span>
+                      <span className="text-muted-foreground">{t("sr.earned")}</span>
                       <span className="font-medium">{selectedBadge.earned.earnedAt}</span>
                     </div>
                   )}
@@ -258,8 +260,8 @@ export default function StudentRewards() {
                 </div>
 
                 <Dialog.Close asChild>
-                  <button className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors" aria-label="Mbyll detajet e titullit">
-                    Mbyll
+                  <button className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors" aria-label={t("common.close")}>
+                    {t("common.close")}
                   </button>
                 </Dialog.Close>
               </>

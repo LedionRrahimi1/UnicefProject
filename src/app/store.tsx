@@ -19,6 +19,7 @@ const defaults: AccessibilitySettings = {
   darkMode: false,
   readingFont: "inter",
   reducedMotion: false,
+  appLanguage: "sq",
 };
 
 const AppContext = createContext<AppState>({
@@ -37,7 +38,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
 
   const [accessibility, setAccessibilityState] = useState<AccessibilitySettings>(() => {
-    try { return { ...defaults, ...JSON.parse(localStorage.getItem("lexolehte_a11y") ?? "{}") }; } catch { return defaults; }
+    try {
+      const saved = JSON.parse(localStorage.getItem("lexolehte_a11y") ?? "{}") as Partial<AccessibilitySettings>;
+      return {
+        ...defaults,
+        ...saved,
+        appLanguage: saved.appLanguage === "en" ? "en" : "sq",
+      };
+    } catch {
+      return defaults;
+    }
   });
 
   const [accessibilityOpen, setAccessibilityOpen] = useState(false);
@@ -63,6 +73,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const root = document.documentElement;
     root.style.fontSize = `${accessibility.fontSize}px`;
+    root.lang = accessibility.appLanguage === "en" ? "en" : "sq";
     if (accessibility.darkMode) root.classList.add("dark");
     else root.classList.remove("dark");
     if (accessibility.highContrast) root.setAttribute("data-high-contrast", "true");

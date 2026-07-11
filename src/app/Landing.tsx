@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router";
 import { BookOpen, Sparkles, ArrowRight, Upload, Wand2, Eye, Share2, Check, Shield, Users, Zap, Brain, Headphones } from "lucide-react";
+import { useT } from "./useT";
 
 const features = [
   { icon: Wand2, title: "Thjeshtësim me AI", desc: "Tekstet adaptohen automatikisht sipas nivelit të leximit të çdo nxënësi." },
@@ -11,16 +12,18 @@ const features = [
   { icon: Zap, title: "Analitikë e detajuar", desc: "Gjurmo progresin e çdo nxënësi dhe identifiko nevojat për mbështetje." },
 ];
 
-const steps = [
-  { n: "01", icon: Upload, title: "Ngarko materialin", desc: "Shto tekst, PDF, Word ose foto të materialit mësimor." },
-  { n: "02", icon: Wand2, title: "Adapto me AI", desc: "AI thjeshtëson, përmbledh, krijon fjalor dhe pyetje." },
-  { n: "03", icon: Eye, title: "Shiko dhe aprovo", desc: "Mësuesi kontrollon dhe aprovat materialin e adaptuar." },
-  { n: "04", icon: Share2, title: "Ndaj me nxënësin", desc: "Nxënësi merr materialin të personalizuar për të." },
+const stepMeta = [
+  { n: "01", icon: Upload, titleKey: "landing.step1", desc: "Shto tekst, PDF, Word ose foto të materialit mësimor." },
+  { n: "02", icon: Wand2, titleKey: "landing.step2", desc: "AI thjeshtëson, përmbledh, krijon fjalor dhe pyetje." },
+  { n: "03", icon: Eye, titleKey: "landing.step3", desc: "Mësuesi kontrollon dhe aprovat materialin e adaptuar." },
+  { n: "04", icon: Share2, titleKey: "landing.step4", desc: "Nxënësi merr materialin të personalizuar për të." },
 ];
 
 export default function Landing() {
+  const { t } = useT();
+
   return (
-    <div className="min-h-screen bg-background text-foreground font-[Inter,sans-serif]">
+    <div className="min-h-screen bg-background text-foreground font-sans">
       {/* Nav */}
       <nav className="sticky top-0 z-40 bg-card/95 backdrop-blur border-b border-border">
         <div className="max-w-6xl mx-auto px-5 h-16 flex items-center gap-4">
@@ -31,9 +34,9 @@ export default function Landing() {
             <span className="font-bold text-foreground">LexoLehtë AI</span>
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <Link to="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-2">Hyr</Link>
+            <Link to="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-2">{t("landing.signIn")}</Link>
             <Link to="/login" className="bg-primary text-primary-foreground text-sm font-medium px-4 py-2 rounded-xl hover:bg-primary/90 transition-colors">
-              Fillo falas
+              {t("landing.startFree")}
             </Link>
           </div>
         </div>
@@ -44,21 +47,20 @@ export default function Landing() {
         <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-transparent to-primary/5 pointer-events-none" />
         <div className="max-w-4xl mx-auto text-center relative">
           <div className="inline-flex items-center gap-2 bg-primary/10 text-primary text-sm font-medium px-4 py-1.5 rounded-full mb-6">
-            <Sparkles size={14} /> Fuqizuar nga AI
+            <Sparkles size={14} /> {t("landing.poweredBy")}
           </div>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground leading-tight mb-6">
-            Materiale mësimore që<br />
-            <span className="text-primary">adaptohen për çdo nxënës.</span>
+            {t("landing.hero")}
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8 leading-relaxed">
             LexoLehtë AI ndihmon mësuesit të thjeshtësojnë, përmbledhin dhe adaptojnë materialet mësimore për nxënësit që kanë vështirësi me leximin dhe kuptimin.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link to="/login" className="bg-primary text-primary-foreground font-semibold px-7 py-3.5 rounded-2xl hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 flex items-center gap-2 justify-center">
-              Fillo si mësuese <ArrowRight size={18} />
+            <Link to="/login" className="ui-btn-primary px-7 py-3.5 text-base">
+              {t("landing.startTeacher")} <ArrowRight size={18} />
             </Link>
-            <Link to="/login" className="border border-border text-foreground font-medium px-7 py-3.5 rounded-2xl hover:bg-muted transition-colors flex items-center gap-2 justify-center">
-              Shiko demonstrimin
+            <Link to="/login" className="ui-btn-secondary px-7 py-3.5 text-base">
+              {t("landing.watchDemo")}
             </Link>
           </div>
         </div>
@@ -90,9 +92,9 @@ export default function Landing() {
             <div className="px-6 pb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="bg-muted/40 rounded-xl p-4">
                 <p className="text-sm font-semibold mb-3">Aktiviteti i fundit</p>
-                {["Ardi përfundoi kuizin 'Fotosinteza'", "Sara kërkoi shpjegime për 4 fjalë"].map(t => (
-                  <div key={t} className="flex items-center gap-2 text-xs text-muted-foreground py-1.5 border-b border-border last:border-0">
-                    <Check size={12} className="text-success shrink-0" /> {t}
+                {["Ardi përfundoi kuizin 'Fotosinteza'", "Sara kërkoi shpjegime për 4 fjalë"].map(activity => (
+                  <div key={activity} className="flex items-center gap-2 text-xs text-muted-foreground py-1.5 border-b border-border last:border-0">
+                    <Check size={12} className="text-success shrink-0" /> {activity}
                   </div>
                 ))}
               </div>
@@ -113,7 +115,7 @@ export default function Landing() {
       {/* Problem section */}
       <section className="py-20 px-5 bg-card">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl font-bold mb-4">Problemi</h2>
+          <h2 className="text-3xl font-bold mb-4">{t("landing.problem")}</h2>
           <p className="text-lg text-muted-foreground leading-relaxed max-w-2xl mx-auto">
             1 nga 5 nxënës has vështirësi me leximin. Materialet standarde shpesh janë tepër komplekse. Mësuesit nuk kanë kohë të krijojnë versione individuale për çdo nxënës.
           </p>
@@ -136,19 +138,19 @@ export default function Landing() {
       <section className="py-20 px-5">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold mb-3">Si funksionon?</h2>
-            <p className="text-muted-foreground">Katër hapa të thjeshtë për materiale të adaptuara.</p>
+            <h2 className="text-3xl font-bold mb-3">{t("landing.how")}</h2>
+            <p className="text-muted-foreground">{t("landing.howSub")}</p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {steps.map((step, i) => (
+            {stepMeta.map((step, i) => (
               <div key={step.n} className="relative">
-                {i < steps.length - 1 && <div className="hidden lg:block absolute top-8 left-full w-full h-px bg-border z-0" />}
+                {i < stepMeta.length - 1 && <div className="hidden lg:block absolute top-8 left-full w-full h-px bg-border z-0" />}
                 <div className="bg-card border border-border rounded-2xl p-5 relative z-10">
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
                     <step.icon size={20} className="text-primary" />
                   </div>
                   <span className="text-xs font-mono text-muted-foreground">{step.n}</span>
-                  <h3 className="font-semibold mt-1 mb-2">{step.title}</h3>
+                  <h3 className="font-semibold mt-1 mb-2">{t(step.titleKey)}</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">{step.desc}</p>
                 </div>
               </div>
@@ -161,7 +163,7 @@ export default function Landing() {
       <section className="py-20 px-5 bg-card">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold mb-3">Veçoritë</h2>
+            <h2 className="text-3xl font-bold mb-3">{t("landing.features")}</h2>
             <p className="text-muted-foreground">Gjithçka për të mbështetur nxënës dhe mësues.</p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -183,10 +185,10 @@ export default function Landing() {
         <div className="max-w-2xl mx-auto text-center">
           <div className="bg-primary rounded-3xl p-10 text-primary-foreground">
             <BookOpen size={36} className="mx-auto mb-4 opacity-80" />
-            <h2 className="text-3xl font-bold mb-3">Gati të filloni?</h2>
+            <h2 className="text-3xl font-bold mb-3">{t("landing.cta")}</h2>
             <p className="text-primary-foreground/80 mb-6">Hyrni me llogarinë demo dhe shikoni si funksionon.</p>
             <Link to="/login" className="bg-white text-primary font-semibold px-8 py-3.5 rounded-2xl hover:bg-primary-foreground/90 transition-colors inline-flex items-center gap-2">
-              Fillo tani <ArrowRight size={18} />
+              {t("landing.startNow")} <ArrowRight size={18} />
             </Link>
           </div>
         </div>

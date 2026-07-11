@@ -101,6 +101,9 @@ export const MOCK_MATERIALS: Material[] = [
     ],
     teacherNotes:
       "Ky material është i përshtatshëm për nxënësit e klasës VI. Rekomandohet leximi me zë i lartë. Vëmendje te fjala 'klorofil' — shumë nxënës e kanë të vështirë.",
+    englishText:
+      "Photosynthesis is how plants make their own food. Plants use sunlight, water, and air. This process happens mainly in the leaves. Plants take carbon dioxide from the air and water from the soil. With the help of light, they make sugar as food and release oxygen into the air. That is why plants are important for our life.",
+    illustrations: [],
     status: "published",
     createdAt: "2026-07-01",
     studentCount: 22,
@@ -120,6 +123,8 @@ export const MOCK_MATERIALS: Material[] = [
     vocabulary: [],
     quiz: [],
     teacherNotes: "",
+    englishText: "",
+    illustrations: [],
     status: "approved",
     createdAt: "2026-07-03",
     studentCount: 18,
@@ -138,6 +143,8 @@ export const MOCK_MATERIALS: Material[] = [
     vocabulary: [],
     quiz: [],
     teacherNotes: "",
+    englishText: "",
+    illustrations: [],
     status: "draft",
     createdAt: "2026-07-05",
     studentCount: 0,
@@ -159,6 +166,7 @@ export const MOCK_STUDENTS: Student[] = [
     alertReason: "Vështirësi në identifikimin e idesë kryesore",
     preferredFont: "lexend",
     audioEnabled: true,
+    visualPreferred: true,
     language: "sq",
   },
   {
@@ -173,6 +181,7 @@ export const MOCK_STUDENTS: Student[] = [
     alertReason: "Kërkoi shumë shpjegime fjalësh",
     preferredFont: "atkinson",
     audioEnabled: true,
+    visualPreferred: true,
     language: "sq",
   },
   {
@@ -187,6 +196,7 @@ export const MOCK_STUDENTS: Student[] = [
     alertReason: "Dy detyra të papërfunduara",
     preferredFont: "inter",
     audioEnabled: false,
+    visualPreferred: true,
     language: "sq",
   },
   {
@@ -200,6 +210,7 @@ export const MOCK_STUDENTS: Student[] = [
     status: "excellent",
     preferredFont: "lexend",
     audioEnabled: false,
+    visualPreferred: false,
     language: "sq",
   },
   {
@@ -213,6 +224,7 @@ export const MOCK_STUDENTS: Student[] = [
     status: "active",
     preferredFont: "inter",
     audioEnabled: true,
+    visualPreferred: false,
     language: "sq",
   },
   {
@@ -226,6 +238,7 @@ export const MOCK_STUDENTS: Student[] = [
     status: "excellent",
     preferredFont: "atkinson",
     audioEnabled: false,
+    visualPreferred: true,
     language: "sq",
   },
   {
@@ -239,6 +252,7 @@ export const MOCK_STUDENTS: Student[] = [
     status: "active",
     preferredFont: "lexend",
     audioEnabled: true,
+    visualPreferred: true,
     language: "sq",
   },
 ];

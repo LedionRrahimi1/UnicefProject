@@ -4,13 +4,26 @@ import {
   MOCK_STUDENTS,
   MOCK_CLASSES,
 } from "./mockData";
-import type { Material, Assignment, Student, ClassGroup } from "./types";
+import type {
+  Material,
+  Assignment,
+  Student,
+  ClassGroup,
+  LearningProfile,
+  LearningReport,
+  Flashcard,
+  MemoryBoosterPack,
+} from "./types";
 
 const KEYS = {
-  materials: "lexolehte_materials_v1",
+  materials: "lexolehte_materials_v2",
   assignments: "lexolehte_assignments_v1",
-  students: "lexolehte_students_v1",
+  students: "lexolehte_students_v2",
   classes: "lexolehte_classes_v1",
+  profiles: "lexolehte_learning_profiles_v1",
+  reports: "lexolehte_learning_reports_v1",
+  flashcards: "lexolehte_flashcards_v1",
+  memoryBoosters: "lexolehte_memory_boosters_v1",
 } as const;
 
 function load<T>(key: string, fallback: T): T {
@@ -24,12 +37,28 @@ function load<T>(key: string, fallback: T): T {
 }
 
 function save<T>(key: string, value: T) {
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    const quota =
+      err instanceof DOMException &&
+      (err.name === "QuotaExceededError" || err.code === 22 || err.code === 1014);
+    if (quota) {
+      throw new Error(
+        "Hapësira e ruajtjes u mbush. Fshi materiale të vjetra ose çaktivizo Vizualizimet."
+      );
+    }
+    throw err;
+  }
 }
 
 /** Seed once from mock data, then always use localStorage. */
 export function getMaterials(): Material[] {
-  return load(KEYS.materials, MOCK_MATERIALS);
+  return load(KEYS.materials, MOCK_MATERIALS).map(m => ({
+    ...m,
+    illustrations: m.illustrations ?? [],
+    englishText: m.englishText ?? "",
+  }));
 }
 
 export function setMaterials(materials: Material[]) {
@@ -45,7 +74,12 @@ export function setAssignments(assignments: Assignment[]) {
 }
 
 export function getStudents(): Student[] {
-  return load(KEYS.students, MOCK_STUDENTS);
+  const list = load(KEYS.students, MOCK_STUDENTS);
+  return list.map(s => ({
+    ...s,
+    visualPreferred: s.visualPreferred ?? false,
+    audioEnabled: s.audioEnabled ?? true,
+  }));
 }
 
 export function setStudents(students: Student[]) {
@@ -114,4 +148,86 @@ export function publishMaterialToStudents(material: Material): Assignment[] {
   setMaterials(materials);
 
   return created;
+}
+
+// ── Learning intelligence persistence ─────────────────────────────────────────
+
+export function getLearningProfiles(): LearningProfile[] {
+  return load(KEYS.profiles, [] as LearningProfile[]);
+}
+
+export function setLearningProfiles(profiles: LearningProfile[]) {
+  save(KEYS.profiles, profiles);
+}
+
+export function getLearningProfile(studentId: string): LearningProfile | undefined {
+  return getLearningProfiles().find(p => p.studentId === studentId);
+}
+
+export function upsertLearningProfile(profile: LearningProfile) {
+  const all = getLearningProfiles();
+  const idx = all.findIndex(p => p.studentId === profile.studentId);
+  if (idx >= 0) {
+    all[idx] = profile;
+  } else {
+    all.push(profile);
+  }
+  setLearningProfiles(all);
+}
+
+export function getLearningReports(): LearningReport[] {
+  return load(KEYS.reports, [] as LearningReport[]);
+}
+
+export function setLearningReports(reports: LearningReport[]) {
+  save(KEYS.reports, reports);
+}
+
+export function addLearningReport(report: LearningReport) {
+  setLearningReports([report, ...getLearningReports()]);
+}
+
+export function getReportsForStudent(studentId: string): LearningReport[] {
+  return getLearningReports().filter(r => r.studentId === studentId);
+}
+
+export function getReportByAssignment(assignmentId: string): LearningReport | undefined {
+  return getLearningReports().find(r => r.assignmentId === assignmentId);
+}
+
+export function getFlashcards(): Flashcard[] {
+  return load(KEYS.flashcards, [] as Flashcard[]);
+}
+
+export function setFlashcards(cards: Flashcard[]) {
+  save(KEYS.flashcards, cards);
+}
+
+export function getFlashcardsForMaterial(materialId: string): Flashcard[] {
+  return getFlashcards().filter(c => c.materialId === materialId);
+}
+
+export function upsertFlashcardsForMaterial(materialId: string, cards: Flashcard[]) {
+  const others = getFlashcards().filter(c => c.materialId !== materialId);
+  setFlashcards([...cards, ...others]);
+}
+
+export function getMemoryBoosters(): MemoryBoosterPack[] {
+  return load(KEYS.memoryBoosters, [] as MemoryBoosterPack[]);
+}
+
+export function setMemoryBoosters(packs: MemoryBoosterPack[]) {
+  save(KEYS.memoryBoosters, packs);
+}
+
+export function addMemoryBooster(pack: MemoryBoosterPack) {
+  setMemoryBoosters([pack, ...getMemoryBoosters()]);
+}
+
+export function getMemoryBoostersForStudent(studentId: string): MemoryBoosterPack[] {
+  return getMemoryBoosters().filter(p => p.studentId === studentId);
+}
+
+export function getMemoryBoosterByAssignment(assignmentId: string): MemoryBoosterPack | undefined {
+  return getMemoryBoosters().find(p => p.assignmentId === assignmentId);
 }

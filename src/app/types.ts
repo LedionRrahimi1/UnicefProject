@@ -42,7 +42,11 @@ export interface Material {
   keyPoints: string[];
   vocabulary: VocabWord[];
   quiz: QuizQuestion[];
+  /** Full English translation of the simplified text (when teacher enables Përkthim). */
+  englishText: string;
   teacherNotes: string;
+  /** AI-generated educational illustrations (data URLs or remote URLs). */
+  illustrations: string[];
   status: MaterialStatus;
   createdAt: string;
   studentCount: number;
@@ -62,6 +66,8 @@ export interface Student {
   alertReason?: string;
   preferredFont: string;
   audioEnabled: boolean;
+  /** Learns better with pictures / diagrams than audio alone. */
+  visualPreferred: boolean;
   language: string;
 }
 
@@ -159,6 +165,8 @@ export interface AccessibilitySettings {
   darkMode: boolean;
   readingFont: "inter" | "lexend" | "atkinson";
   reducedMotion: boolean;
+  /** Application UI language: Albanian (sq) or English (en). */
+  appLanguage: "sq" | "en";
 }
 
 export interface ActivityItem {
@@ -166,4 +174,99 @@ export interface ActivityItem {
   text: string;
   time: string;
   icon: string;
+}
+
+/** Behavioral signals collected during reading / quiz (no medical diagnoses). */
+export type LearningEventType =
+  | "explain"
+  | "audio"
+  | "vocab"
+  | "simplified_view"
+  | "hint"
+  | "quiz_wrong"
+  | "quiz_correct";
+
+export interface LearningEvent {
+  id: string;
+  studentId: string;
+  materialId: string;
+  assignmentId?: string;
+  type: LearningEventType;
+  detail?: string;
+  createdAt: string;
+}
+
+export interface WrongQuestionDetail {
+  questionId: string;
+  question: string;
+  studentAnswer: string;
+  correctAnswer: string;
+}
+
+export interface SessionMetrics {
+  studentId: string;
+  materialId: string;
+  assignmentId: string;
+  score: number;
+  timeSpentMinutes: number;
+  attempts: number;
+  explainCount: number;
+  audioPlayCount: number;
+  simplifiedUsed: boolean;
+  vocabOpened: number;
+  hintCount: number;
+  wrongQuestions: WrongQuestionDetail[];
+  topic: string;
+  subject: string;
+}
+
+export interface LearningReport {
+  id: string;
+  studentId: string;
+  materialId: string;
+  assignmentId: string;
+  performanceSummary: string;
+  strengths: string[];
+  difficulties: string[];
+  recommendations: string[];
+  nextLessonSteps: string[];
+  patterns: string[];
+  teacherRecommendations: string[];
+  studentMessage: string;
+  studyPlan: string[];
+  fullTeacherReport: string;
+  createdAt: string;
+}
+
+export interface LearningProfile {
+  studentId: string;
+  traits: string[];
+  strengths: string[];
+  supportNeeds: string[];
+  preferredFormats: string[];
+  teacherRecommendations: string[];
+  updatedAt: string;
+  sessionCount: number;
+}
+
+export type FlashcardType = "definition" | "concept" | "quick";
+
+export interface Flashcard {
+  id: string;
+  materialId: string;
+  front: string;
+  back: string;
+  type: FlashcardType;
+}
+
+export interface MemoryBoosterPack {
+  id: string;
+  studentId: string;
+  materialId: string;
+  assignmentId: string;
+  shortSummary: string;
+  flashcards: Flashcard[];
+  reviewQuestions: string[];
+  reviewSchedule: { after1Day: string; after3Days: string; after7Days: string };
+  createdAt: string;
 }
