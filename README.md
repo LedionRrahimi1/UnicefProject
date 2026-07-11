@@ -1,12 +1,20 @@
 # MësoLehtë AI
 
-**Materiale mësimore që adaptohen për çdo nxënës.**
+**[Shqip](#shqip)** · **[English](#english)**
 
-MësoLehtë AI është platformë edukative për shkolla: mësuesja ngarkon një tekst të vështirë, AI e përshtat sipas nevojave të nxënësve, dhe mësuesja mbetet gjithmonë në kontroll — rishikon, ndryshon dhe publikon.
+**Materiale mësimore që adaptohen për çdo nxënës.**  
+*Learning materials that adapt for every student.*
+
+> Mentors / jury: **Albanian starts below**. Full **English** version is further down → [jump to English](#english).
 
 **GitHub:** https://github.com/LedionRrahimi1/UnicefProject
 
 ---
+
+# Shqip
+
+MësoLehtë AI është platformë edukative për shkolla: mësuesja ngarkon një tekst të vështirë, AI e përshtat sipas nevojave të nxënësve, dhe mësuesja mbetet gjithmonë në kontroll — rishikon, ndryshon dhe publikon.
+
 
 ## Problemi që zgjidhim
 
@@ -254,7 +262,12 @@ Demo edukativ — MësoLehtë AI.
 ---
 ---
 
+---
+---
+
 # English
+
+> This is the full English version of the README.
 
 **Learning materials that adapt for every student.**
 
