@@ -1,4 +1,6 @@
 import type { LearningEvent, LearningEventType } from "./types";
+import { isSupabaseEnabled } from "./supabase";
+import { sbInsertLearningEvent } from "./supabaseDb";
 
 const EVENTS_KEY = "mesolehte_learning_events_v1";
 const SESSION_START_KEY = "mesolehte_session_start_v1";
@@ -14,10 +16,10 @@ function loadEvents(): LearningEvent[] {
 }
 
 function saveEvents(events: LearningEvent[]) {
-  // Keep last 500 events to avoid unbounded growth
   localStorage.setItem(EVENTS_KEY, JSON.stringify(events.slice(-500)));
 }
 
+/** Local + cloud (when Supabase on). Local keeps same-session counts snappy. */
 export function trackLearningEvent(input: {
   studentId: string;
   materialId: string;
@@ -37,6 +39,11 @@ export function trackLearningEvent(input: {
   const all = loadEvents();
   all.push(event);
   saveEvents(all);
+
+  if (isSupabaseEnabled()) {
+    void sbInsertLearningEvent(event);
+  }
+
   return event;
 }
 

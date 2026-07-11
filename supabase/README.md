@@ -9,6 +9,11 @@ Run `schema_auth.sql` next.
 ## 2b) Stars + Titles (gamification)
 Run `schema_gamification.sql` (`xp_transactions`, `student_badges`).
 
+## 2c) Learning cloud (profiles, reports, Memory Booster)
+Run `schema_learning.sql` (`learning_profiles`, `learning_reports`, `flashcards`, `memory_boosters`, `learning_events`).
+
+Full cloud demo = all four SQL files (schema → auth → gamification → learning).
+
 ## 3) Disable email confirmation (important)
 **Authentication → Providers → Email → turn OFF "Confirm email"**  
 Otherwise new accounts cannot log in until they confirm.

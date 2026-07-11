@@ -1,4 +1,19 @@
-import type { Assignment, ClassGroup, Material, Student, StudentBadge, User, UserRole, XPTransaction } from "./types";
+import type {
+  Assignment,
+  ClassGroup,
+  Flashcard,
+  LearningEvent,
+  LearningEventType,
+  LearningProfile,
+  LearningReport,
+  Material,
+  MemoryBoosterPack,
+  Student,
+  StudentBadge,
+  User,
+  UserRole,
+  XPTransaction,
+} from "./types";
 import { createEphemeralAuthClient, getSupabase } from "./supabase";
 
 /** DB row shape (snake_case) for public.materials */
@@ -843,4 +858,327 @@ export async function sbInsertStudentBadge(badge: StudentBadge): Promise<void> {
     teacher_message: badge.teacherMessage ?? null,
   }, { onConflict: "student_id,badge_id" });
   if (error) throwSb(error, "Nuk u ruajt titulli.");
+}
+
+// ── Learning (profiles, reports, flashcards, boosters, events) ────────────────
+
+type ProfileLearnRow = {
+  student_id: string;
+  traits: unknown;
+  strengths: unknown;
+  support_needs: unknown;
+  preferred_formats: unknown;
+  teacher_recommendations: unknown;
+  session_count: number;
+  updated_at: string;
+};
+
+type ReportRow = {
+  id: string;
+  student_id: string;
+  material_id: string;
+  assignment_id: string;
+  performance_summary: string;
+  strengths: unknown;
+  difficulties: unknown;
+  recommendations: unknown;
+  next_lesson_steps: unknown;
+  patterns: unknown;
+  teacher_recommendations: unknown;
+  student_message: string;
+  study_plan: unknown;
+  full_teacher_report: string;
+  created_at: string;
+};
+
+type FlashcardRow = {
+  id: string;
+  material_id: string;
+  front: string;
+  back: string;
+  type: Flashcard["type"];
+};
+
+type BoosterRow = {
+  id: string;
+  student_id: string;
+  material_id: string;
+  assignment_id: string;
+  short_summary: string;
+  flashcards: unknown;
+  review_questions: unknown;
+  review_schedule: unknown;
+  created_at: string;
+};
+
+type EventRow = {
+  id: string;
+  student_id: string;
+  material_id: string;
+  assignment_id: string | null;
+  type: LearningEventType;
+  detail: string | null;
+  created_at: string;
+};
+
+function asStringArray(v: unknown): string[] {
+  return Array.isArray(v) ? v.map(String) : [];
+}
+
+function rowToLearningProfile(row: ProfileLearnRow): LearningProfile {
+  return {
+    studentId: row.student_id,
+    traits: asStringArray(row.traits),
+    strengths: asStringArray(row.strengths),
+    supportNeeds: asStringArray(row.support_needs),
+    preferredFormats: asStringArray(row.preferred_formats),
+    teacherRecommendations: asStringArray(row.teacher_recommendations),
+    sessionCount: row.session_count ?? 0,
+    updatedAt: row.updated_at,
+  };
+}
+
+function rowToLearningReport(row: ReportRow): LearningReport {
+  return {
+    id: row.id,
+    studentId: row.student_id,
+    materialId: row.material_id,
+    assignmentId: row.assignment_id,
+    performanceSummary: row.performance_summary || "",
+    strengths: asStringArray(row.strengths),
+    difficulties: asStringArray(row.difficulties),
+    recommendations: asStringArray(row.recommendations),
+    nextLessonSteps: asStringArray(row.next_lesson_steps),
+    patterns: asStringArray(row.patterns),
+    teacherRecommendations: asStringArray(row.teacher_recommendations),
+    studentMessage: row.student_message || "",
+    studyPlan: asStringArray(row.study_plan),
+    fullTeacherReport: row.full_teacher_report || "",
+    createdAt: row.created_at,
+  };
+}
+
+function rowToFlashcard(row: FlashcardRow): Flashcard {
+  return {
+    id: row.id,
+    materialId: row.material_id,
+    front: row.front,
+    back: row.back,
+    type: row.type,
+  };
+}
+
+function rowToMemoryBooster(row: BoosterRow): MemoryBoosterPack {
+  const schedule = (row.review_schedule && typeof row.review_schedule === "object"
+    ? row.review_schedule
+    : {}) as MemoryBoosterPack["reviewSchedule"];
+  const cards = Array.isArray(row.flashcards) ? (row.flashcards as Flashcard[]) : [];
+  return {
+    id: row.id,
+    studentId: row.student_id,
+    materialId: row.material_id,
+    assignmentId: row.assignment_id,
+    shortSummary: row.short_summary || "",
+    flashcards: cards,
+    reviewQuestions: asStringArray(row.review_questions),
+    reviewSchedule: {
+      after1Day: schedule.after1Day || "",
+      after3Days: schedule.after3Days || "",
+      after7Days: schedule.after7Days || "",
+    },
+    createdAt: row.created_at,
+  };
+}
+
+function rowToLearningEvent(row: EventRow): LearningEvent {
+  return {
+    id: row.id,
+    studentId: row.student_id,
+    materialId: row.material_id,
+    assignmentId: row.assignment_id ?? undefined,
+    type: row.type,
+    detail: row.detail ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+export async function sbGetLearningProfile(studentId: string): Promise<LearningProfile | undefined> {
+  const { data, error } = await getSupabase()
+    .from("learning_profiles")
+    .select("*")
+    .eq("student_id", studentId)
+    .maybeSingle();
+  if (error) {
+    console.warn("[learning_profiles]", error.message);
+    return undefined;
+  }
+  return data ? rowToLearningProfile(data as ProfileLearnRow) : undefined;
+}
+
+export async function sbUpsertLearningProfile(profile: LearningProfile): Promise<void> {
+  const { error } = await getSupabase().from("learning_profiles").upsert({
+    student_id: profile.studentId,
+    traits: profile.traits,
+    strengths: profile.strengths,
+    support_needs: profile.supportNeeds,
+    preferred_formats: profile.preferredFormats,
+    teacher_recommendations: profile.teacherRecommendations,
+    session_count: profile.sessionCount,
+    updated_at: profile.updatedAt,
+  });
+  if (error) throwSb(error, "Nuk u ruajt profili mësimor.");
+}
+
+export async function sbGetReportsForStudent(studentId: string): Promise<LearningReport[]> {
+  const { data, error } = await getSupabase()
+    .from("learning_reports")
+    .select("*")
+    .eq("student_id", studentId)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.warn("[learning_reports]", error.message);
+    return [];
+  }
+  return (data as ReportRow[]).map(rowToLearningReport);
+}
+
+export async function sbGetReportByAssignment(assignmentId: string): Promise<LearningReport | undefined> {
+  const { data, error } = await getSupabase()
+    .from("learning_reports")
+    .select("*")
+    .eq("assignment_id", assignmentId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.warn("[learning_reports]", error.message);
+    return undefined;
+  }
+  return data ? rowToLearningReport(data as ReportRow) : undefined;
+}
+
+export async function sbInsertLearningReport(report: LearningReport): Promise<void> {
+  const { error } = await getSupabase().from("learning_reports").insert({
+    id: report.id,
+    student_id: report.studentId,
+    material_id: report.materialId,
+    assignment_id: report.assignmentId,
+    performance_summary: report.performanceSummary,
+    strengths: report.strengths,
+    difficulties: report.difficulties,
+    recommendations: report.recommendations,
+    next_lesson_steps: report.nextLessonSteps,
+    patterns: report.patterns,
+    teacher_recommendations: report.teacherRecommendations,
+    student_message: report.studentMessage,
+    study_plan: report.studyPlan,
+    full_teacher_report: report.fullTeacherReport,
+    created_at: report.createdAt,
+  });
+  if (error) throwSb(error, "Nuk u ruajt raporti mësimor.");
+}
+
+export async function sbGetFlashcardsForMaterial(materialId: string): Promise<Flashcard[]> {
+  const { data, error } = await getSupabase()
+    .from("flashcards")
+    .select("*")
+    .eq("material_id", materialId);
+  if (error) {
+    console.warn("[flashcards]", error.message);
+    return [];
+  }
+  return (data as FlashcardRow[]).map(rowToFlashcard);
+}
+
+export async function sbUpsertFlashcardsForMaterial(materialId: string, cards: Flashcard[]): Promise<void> {
+  const sb = getSupabase();
+  const { error: delErr } = await sb.from("flashcards").delete().eq("material_id", materialId);
+  if (delErr) throwSb(delErr, "Nuk u përditësuan flashcards.");
+  if (cards.length === 0) return;
+  const { error } = await sb.from("flashcards").insert(
+    cards.map(c => ({
+      id: c.id,
+      material_id: c.materialId,
+      front: c.front,
+      back: c.back,
+      type: c.type,
+    }))
+  );
+  if (error) throwSb(error, "Nuk u ruajtën flashcards.");
+}
+
+export async function sbGetMemoryBoostersForStudent(studentId: string): Promise<MemoryBoosterPack[]> {
+  const { data, error } = await getSupabase()
+    .from("memory_boosters")
+    .select("*")
+    .eq("student_id", studentId)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.warn("[memory_boosters]", error.message);
+    return [];
+  }
+  return (data as BoosterRow[]).map(rowToMemoryBooster);
+}
+
+export async function sbGetMemoryBoosterByAssignment(assignmentId: string): Promise<MemoryBoosterPack | undefined> {
+  const { data, error } = await getSupabase()
+    .from("memory_boosters")
+    .select("*")
+    .eq("assignment_id", assignmentId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.warn("[memory_boosters]", error.message);
+    return undefined;
+  }
+  return data ? rowToMemoryBooster(data as BoosterRow) : undefined;
+}
+
+export async function sbInsertMemoryBooster(pack: MemoryBoosterPack): Promise<void> {
+  const { error } = await getSupabase().from("memory_boosters").insert({
+    id: pack.id,
+    student_id: pack.studentId,
+    material_id: pack.materialId,
+    assignment_id: pack.assignmentId,
+    short_summary: pack.shortSummary,
+    flashcards: pack.flashcards,
+    review_questions: pack.reviewQuestions,
+    review_schedule: pack.reviewSchedule,
+    created_at: pack.createdAt,
+  });
+  if (error) throwSb(error, "Nuk u ruajt Memory Booster.");
+}
+
+export async function sbInsertLearningEvent(event: LearningEvent): Promise<void> {
+  const { error } = await getSupabase().from("learning_events").insert({
+    id: event.id,
+    student_id: event.studentId,
+    material_id: event.materialId,
+    assignment_id: event.assignmentId ?? null,
+    type: event.type,
+    detail: event.detail ?? null,
+    created_at: event.createdAt,
+  });
+  if (error) {
+    console.warn("[learning_events]", error.message);
+  }
+}
+
+export async function sbCountLearningEvents(
+  studentId: string,
+  materialId: string,
+  type: LearningEventType
+): Promise<number> {
+  const { count, error } = await getSupabase()
+    .from("learning_events")
+    .select("id", { count: "exact", head: true })
+    .eq("student_id", studentId)
+    .eq("material_id", materialId)
+    .eq("type", type);
+  if (error) {
+    console.warn("[learning_events]", error.message);
+    return 0;
+  }
+  return count ?? 0;
 }

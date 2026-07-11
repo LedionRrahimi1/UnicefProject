@@ -65,6 +65,17 @@ import {
   sbInsertXp,
   sbGetBadgesForStudent,
   sbInsertStudentBadge,
+  sbGetLearningProfile,
+  sbUpsertLearningProfile,
+  sbGetReportsForStudent,
+  sbGetReportByAssignment,
+  sbInsertLearningReport,
+  sbGetFlashcardsForMaterial,
+  sbUpsertFlashcardsForMaterial,
+  sbGetMemoryBoostersForStudent,
+  sbGetMemoryBoosterByAssignment,
+  sbInsertMemoryBooster,
+  sbCountLearningEvents,
 } from "./supabaseDb";
 import type { User } from "./types";
 import {
@@ -755,31 +766,37 @@ function isoPlusDays(days: number): string {
 export const learningService = {
   async getProfile(studentId: string): Promise<LearningProfile | undefined> {
     await delay(80);
+    if (isSupabaseEnabled()) return sbGetLearningProfile(studentId);
     return getLearningProfile(studentId);
   },
 
   async getReportsForStudent(studentId: string): Promise<LearningReport[]> {
     await delay(80);
+    if (isSupabaseEnabled()) return sbGetReportsForStudent(studentId);
     return getReportsForStudent(studentId);
   },
 
   async getReportByAssignment(assignmentId: string): Promise<LearningReport | undefined> {
     await delay(80);
+    if (isSupabaseEnabled()) return sbGetReportByAssignment(assignmentId);
     return getReportByAssignment(assignmentId);
   },
 
   async getFlashcards(materialId: string): Promise<Flashcard[]> {
     await delay(80);
+    if (isSupabaseEnabled()) return sbGetFlashcardsForMaterial(materialId);
     return getFlashcardsForMaterial(materialId);
   },
 
   async getMemoryBoosters(studentId: string): Promise<MemoryBoosterPack[]> {
     await delay(80);
+    if (isSupabaseEnabled()) return sbGetMemoryBoostersForStudent(studentId);
     return getMemoryBoostersForStudent(studentId);
   },
 
   async getMemoryBoosterByAssignment(assignmentId: string): Promise<MemoryBoosterPack | undefined> {
     await delay(80);
+    if (isSupabaseEnabled()) return sbGetMemoryBoosterByAssignment(assignmentId);
     return getMemoryBoosterByAssignment(assignmentId);
   },
 
@@ -793,12 +810,30 @@ export const learningService = {
     wrongQuestions: WrongQuestionDetail[];
     hintCount: number;
   }): Promise<{ report: LearningReport; profile: LearningProfile; booster: MemoryBoosterPack }> {
-    const material = getMaterials().find(m => m.id === input.materialId);
-    const explainCount = countEvents(input.studentId, input.materialId, "explain");
-    const audioPlayCount = countEvents(input.studentId, input.materialId, "audio");
-    const vocabOpened = countEvents(input.studentId, input.materialId, "vocab");
-    const simplifiedUsed = countEvents(input.studentId, input.materialId, "simplified_view") > 0
-      || Boolean(material?.simplifiedText);
+    const material = isSupabaseEnabled()
+      ? await sbGetMaterialById(input.materialId)
+      : getMaterials().find(m => m.id === input.materialId);
+
+    let explainCount = countEvents(input.studentId, input.materialId, "explain");
+    let audioPlayCount = countEvents(input.studentId, input.materialId, "audio");
+    let vocabOpened = countEvents(input.studentId, input.materialId, "vocab");
+    let simplifiedViews = countEvents(input.studentId, input.materialId, "simplified_view");
+
+    if (isSupabaseEnabled()) {
+      const [cExplain, cAudio, cVocab, cSimp] = await Promise.all([
+        sbCountLearningEvents(input.studentId, input.materialId, "explain"),
+        sbCountLearningEvents(input.studentId, input.materialId, "audio"),
+        sbCountLearningEvents(input.studentId, input.materialId, "vocab"),
+        sbCountLearningEvents(input.studentId, input.materialId, "simplified_view"),
+      ]);
+      // Prefer the higher count (local may be ahead of async cloud inserts)
+      explainCount = Math.max(explainCount, cExplain);
+      audioPlayCount = Math.max(audioPlayCount, cAudio);
+      vocabOpened = Math.max(vocabOpened, cVocab);
+      simplifiedViews = Math.max(simplifiedViews, cSimp);
+    }
+
+    const simplifiedUsed = simplifiedViews > 0 || Boolean(material?.simplifiedText);
     const timeSpentMinutes = getSessionMinutes(input.studentId, input.materialId);
 
     const metrics: SessionMetrics = {
@@ -818,8 +853,12 @@ export const learningService = {
       subject: material?.subject ?? "",
     };
 
-    const existing = getLearningProfile(input.studentId);
-    const student = getStudents().find(s => s.id === input.studentId);
+    const existing = isSupabaseEnabled()
+      ? await sbGetLearningProfile(input.studentId)
+      : getLearningProfile(input.studentId);
+    const student = isSupabaseEnabled()
+      ? await sbGetStudentById(input.studentId)
+      : getStudents().find(s => s.id === input.studentId);
     const ai = await generatePostLessonIntelligence(metrics, existing, {
       visualPreferred: Boolean(student?.visualPreferred),
     });
@@ -841,7 +880,6 @@ export const learningService = {
       fullTeacherReport: ai.fullTeacherReport,
       createdAt: new Date().toISOString(),
     };
-    addLearningReport(report);
 
     const profile: LearningProfile = {
       studentId: input.studentId,
@@ -859,7 +897,6 @@ export const learningService = {
       updatedAt: new Date().toISOString(),
       sessionCount: (existing?.sessionCount ?? 0) + 1,
     };
-    upsertLearningProfile(profile);
 
     const boosterCards: Flashcard[] = (ai.memoryBooster.flashcards || [])
       .filter(c => c.front && c.back)
@@ -874,12 +911,19 @@ export const learningService = {
           : "quick") as Flashcard["type"],
       }));
 
-    // Also merge into material flashcards store if empty
-    if (getFlashcardsForMaterial(input.materialId).length === 0 && boosterCards.length) {
-      upsertFlashcardsForMaterial(input.materialId, boosterCards.map((c, i) => ({
+    const existingCards = isSupabaseEnabled()
+      ? await sbGetFlashcardsForMaterial(input.materialId)
+      : getFlashcardsForMaterial(input.materialId);
+    if (existingCards.length === 0 && boosterCards.length) {
+      const materialCards = boosterCards.map((c, i) => ({
         ...c,
         id: `fc-${input.materialId}-mb-${i}`,
-      })));
+      }));
+      if (isSupabaseEnabled()) {
+        await sbUpsertFlashcardsForMaterial(input.materialId, materialCards);
+      } else {
+        upsertFlashcardsForMaterial(input.materialId, materialCards);
+      }
     }
 
     const booster: MemoryBoosterPack = {
@@ -897,7 +941,16 @@ export const learningService = {
       },
       createdAt: new Date().toISOString(),
     };
-    addMemoryBooster(booster);
+
+    if (isSupabaseEnabled()) {
+      await sbInsertLearningReport(report);
+      await sbUpsertLearningProfile(profile);
+      await sbInsertMemoryBooster(booster);
+    } else {
+      addLearningReport(report);
+      upsertLearningProfile(profile);
+      addMemoryBooster(booster);
+    }
 
     await assignmentService.complete(
       input.assignmentId,

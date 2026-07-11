@@ -1,6 +1,10 @@
 # MësoLehtë AI
 
+**[English](#english-language) · [Shqip](#albanian-language)**
 
+---
+
+<a id="english-language"></a>
 # English Language:
 
 **Learning materials that adapt for every student.**
@@ -119,13 +123,15 @@ If visualizations are on (or the group is visual), AI Images generates a child-f
 
 ### 5. Storage and distribution
 
-With **Supabase** enabled (`VITE_USE_SUPABASE=true`), adapted materials, assignments, **Stars (XP)**, and **Titles (badges)** are saved in the cloud database — not only in the browser. Teachers, classes, and students use **Supabase Auth** + tables (`materials`, `assignments`, `classes`, `students`, `profiles`, `xp_transactions`, `student_badges`).
+With **Supabase** enabled (`VITE_USE_SUPABASE=true`), adapted materials, assignments, **Stars (XP)**, **Titles (badges)**, learning profiles, post-quiz reports, flashcards, and Memory Booster packs are saved in the cloud database — not only in the browser. Teachers, classes, and students use **Supabase Auth** + tables (`materials`, `assignments`, `classes`, `students`, `profiles`, `xp_transactions`, `student_badges`, `learning_profiles`, `learning_reports`, `flashcards`, `memory_boosters`, `learning_events`).
 
 Each adapted version is stored as a separate material with a label (e.g. `Photosynthesis (Visual · Basic)`), linked to that group’s students.
 
 When the teacher **publishes**, assignments are created **only for the target students** of that version — and those students see them after login on any device (same project / env).
 
 Rewards awarded by the teacher (Stars / Titles) sync via Supabase, so the student sees them after refresh on any browser.
+
+Learning data after a quiz (**profile**, **report**, **Memory Booster**, **flashcards**, and reading **events**) is also stored in Supabase via `schema_learning.sql` — so it survives logout and works across devices.
 
 ### 6. AI during reading (after publishing)
 
@@ -164,6 +170,8 @@ After completion, AI analyzes the session (without labeling the child with diagn
 - **Memory Booster**: short summary, flashcards, review questions, 1 / 3 / 7-day schedule
 
 That profile feeds future adaptations → the loop closes: **the more it is used, the more personalized the material becomes.**
+
+With Supabase on, this post-quiz package is **saved in the cloud** (`learning_profiles`, `learning_reports`, `memory_boosters`, `flashcards`), not only in the browser.
 
 ### 9. Pedagogical principles AI follows
 
@@ -204,9 +212,26 @@ AI profile + Memory Booster
 6. Open review → **Approve** → **Publish**  
 7. Log out and log in as a **student** → open the assignment → read / listen → quiz → results  
 
-**Data:** with Supabase on, materials and assignments are shared in the cloud (teacher and student do **not** need the same browser). Set up SQL from `supabase/schema.sql` + `supabase/schema_auth.sql` and keys in `.env` (see `supabase/README.md`).
+**Data:** with Supabase on, the full demo is cloud-backed (teacher and student do **not** need the same browser): materials, assignments, Stars/Titles, learning profiles, reports, flashcards, and Memory Booster.
+
+Run **all four** SQL files in order (see [Database setup](#database-setup-supabase) below), then set keys in `.env` (see `supabase/README.md`).
 
 Offline / fallback: if `VITE_USE_SUPABASE=false`, the app uses browser `localStorage` only (same-browser demo).
+
+---
+
+## Database setup (Supabase)
+
+In the Supabase Dashboard → **SQL Editor**, run these files **in order**:
+
+| Order | File | What it creates |
+|------:|------|-----------------|
+| 1 | `supabase/schema.sql` | `materials`, `assignments`, base `profiles` |
+| 2 | `supabase/schema_auth.sql` | Auth-ready `profiles`, `classes`, `students` |
+| 3 | `supabase/schema_gamification.sql` | `xp_transactions` (Stars), `student_badges` (Titles) |
+| 4 | `supabase/schema_learning.sql` | `learning_profiles`, `learning_reports`, `flashcards`, `memory_boosters`, `learning_events` |
+
+Also: **Authentication → Providers → Email → disable “Confirm email”** so new accounts can log in immediately.
 
 ---
 
@@ -230,7 +255,7 @@ VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-Run `supabase/schema.sql`, then `supabase/schema_auth.sql`, then `supabase/schema_gamification.sql` in the Supabase SQL Editor before enabling the flag.
+Run all four SQL scripts in order (see [Database setup](#database-setup-supabase)) before enabling the flag.
 
 ```bash
 npm run dev
@@ -247,7 +272,7 @@ Open http://localhost:5173
 - React, TypeScript, Vite, Tailwind CSS  
 - React Router, Radix UI, Recharts, Lucide  
 - OpenAI: chat (`gpt-5.6-sol`), TTS (`gpt-4o-mini-tts`), Images (`gpt-image-1`)  
-- **Supabase**: Auth + Postgres (`materials`, `assignments`, `classes`, `students`, `profiles`, `xp_transactions`, `student_badges`)  
+- **Supabase**: Auth + Postgres — materials, classes, students, Stars/Titles, and full learning cloud (profiles, reports, flashcards, Memory Booster, events)  
 - Fallback: `localStorage` (`localDb.ts`) when `VITE_USE_SUPABASE=false`
 
 ---
@@ -256,7 +281,8 @@ Open http://localhost:5173
 
 - OpenAI key is in the frontend for the demo — production should use a server  
 - Full PDF/Word text extraction is limited (pasting text works best)  
-- MVP RLS policies are open for hackathon — tighten before production
+- MVP RLS policies are open for hackathon — tighten before production  
+- No public hosting by default — run locally with `npm run dev` for the jury demo  
 
 ---
 
@@ -278,6 +304,7 @@ supabase/
   schema.sql              → materials + assignments
   schema_auth.sql         → auth profiles, classes, students
   schema_gamification.sql → XP (stars) + student badges (titles)
+  schema_learning.sql     → profiles, reports, flashcards, Memory Booster, events
 ```
 
 ---
@@ -287,8 +314,10 @@ supabase/
 Hackathon / UNICEF project.  
 Educational demo — MësoLehtë AI.
 
+---
 
-Albanian Language:
+<a id="albanian-language"></a>
+# Albanian Language:
 
 # MësoLehtë AI
 
@@ -297,6 +326,8 @@ Albanian Language:
 MësoLehtë AI është platformë edukative për shkolla: mësuesja ngarkon një tekst, AI e përshtat sipas nevojave të nxënësve, dhe mësuesja mbetet gjithmonë në kontroll — rishikon, ndryshon dhe publikon.
 
 **GitHub:** https://github.com/LedionRrahimi1/UnicefProject
+
+**[← English](#english-language)**
 
 ---
 
@@ -408,13 +439,15 @@ Nëse vizualizimet janë të ndezura (ose grupi është vizual), AI Images gjene
 
 ### 5. Ruajtja dhe shpërndarja
 
-Me **Supabase** aktiv (`VITE_USE_SUPABASE=true`), materialet e adapuara, detyrat, **Yjet (XP)** dhe **Titujt** ruhen në databazën cloud — jo vetëm në browser. Mësuesit, klasat dhe nxënësit përdorin **Supabase Auth** + tabela (`materials`, `assignments`, `classes`, `students`, `profiles`, `xp_transactions`, `student_badges`).
+Me **Supabase** aktiv (`VITE_USE_SUPABASE=true`), materialet e adapuara, detyrat, **Yjet (XP)**, **Titujt**, profili mësimor, raportet pas kuizit, flashcards dhe Memory Booster ruhen në databazën cloud — jo vetëm në browser. Mësuesit, klasat dhe nxënësit përdorin **Supabase Auth** + tabela (`materials`, `assignments`, `classes`, `students`, `profiles`, `xp_transactions`, `student_badges`, `learning_profiles`, `learning_reports`, `flashcards`, `memory_boosters`, `learning_events`).
 
 Çdo version i adaptuar ruhet si material i veçantë me etiketë (p.sh. `Fotosinteza (Vizual · Bazik)`), i lidhur me nxënësit e atij grupi.
 
 Kur mësuesja **publikon**, detyrat krijohen **vetëm për nxënësit e synuar** të atij versioni — dhe ata i shohin pas hyrjes nga çdo pajisje (i njëjti projekt / `.env`).
 
 Shpërblimet (Yje / Tituj) sinkronizohen përmes Supabase — nxënësi i sheh pas rifreskimit në çdo browser.
+
+Të dhënat e të nxënit pas kuizit (**profili**, **raporti**, **Memory Booster**, **flashcards** dhe **eventet** e leximit) ruhen gjithashtu në Supabase përmes `schema_learning.sql` — mbijetojnë pas daljes dhe funksionojnë në pajisje të ndryshme.
 
 ### 6. AI gjatë leximit (pas publikimit)
 
@@ -453,6 +486,8 @@ Pas përfundimit, AI analizojnë sesionin (pa etiketuar fëmijën me diagnoza) d
 - **Memory Booster**: përmbledhje e shkurtër, flashcards, pyetje ripërsëritjeje, orar 1 / 3 / 7 ditë
 
 Ky profil përdoret në adaptimet e ardhshme → cikli mbyllet: **sa më shumë përdoret, aq më i personalizuar bëhet materiali**.
+
+Me Supabase aktiv, ky paket pas kuizit **ruhet në cloud** (`learning_profiles`, `learning_reports`, `memory_boosters`, `flashcards`), jo vetëm në browser.
 
 ### 9. Parimet pedagogjike që ndjek AI
 
@@ -493,9 +528,26 @@ AI profil + Memory Booster
 6. Hap review → **Mirato** → **Publiko**  
 7. Dil dhe hyr si **nxënës** → hap detyrën → lexo / dëgjo → kuiz → rezultate  
 
-**Të dhënat:** me Supabase aktiv, materialet dhe detyrat ndahen në cloud (mësuesja dhe nxënësi **nuk** duhet të jenë në të njëjtin browser). Ekzekuto SQL nga `supabase/schema.sql` + `supabase/schema_auth.sql` dhe vendos çelësat në `.env` (shih `supabase/README.md`).
+**Të dhënat:** me Supabase aktiv, demo-ja e plotë është në cloud (mësuesja dhe nxënësi **nuk** duhet të jenë në të njëjtin browser): materiale, detyra, Yje/Tituj, profili mësimor, raportet, flashcards dhe Memory Booster.
+
+Ekzekuto **katër** skedarët SQL me radhë (shih [Konfigurimi i databazës](#konfigurimi-i-databazës-supabase) më poshtë), pastaj vendos çelësat në `.env` (shih `supabase/README.md`).
 
 Nëse `VITE_USE_SUPABASE=false`, app-i përdor vetëm `localStorage` (demo në të njëjtin browser).
+
+---
+
+## Konfigurimi i databazës (Supabase)
+
+Në Supabase Dashboard → **SQL Editor**, ekzekuto këto skedarë **me radhë**:
+
+| Radha | Skedari | Çfarë krijon |
+|------:|---------|--------------|
+| 1 | `supabase/schema.sql` | `materials`, `assignments`, `profiles` bazë |
+| 2 | `supabase/schema_auth.sql` | `profiles` për Auth, `classes`, `students` |
+| 3 | `supabase/schema_gamification.sql` | `xp_transactions` (Yje), `student_badges` (Tituj) |
+| 4 | `supabase/schema_learning.sql` | `learning_profiles`, `learning_reports`, `flashcards`, `memory_boosters`, `learning_events` |
+
+Gjithashtu: **Authentication → Providers → Email → çaktivizo “Confirm email”** që llogaritë e reja të hyjnë menjëherë.
 
 ---
 
@@ -519,7 +571,7 @@ VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-Ekzekuto `supabase/schema.sql`, pastaj `supabase/schema_auth.sql`, pastaj `supabase/schema_gamification.sql` në SQL Editor të Supabase para se të aktivizosh flag-un.
+Ekzekuto katër skriptet SQL me radhë (shih [Konfigurimi i databazës](#konfigurimi-i-databazës-supabase)) para se të aktivizosh flag-un.
 
 ```bash
 npm run dev
@@ -536,7 +588,7 @@ Hape http://localhost:5173
 - React, TypeScript, Vite, Tailwind CSS  
 - React Router, Radix UI, Recharts, Lucide  
 - OpenAI: chat (`gpt-5.6-sol`), TTS (`gpt-4o-mini-tts`), Images (`gpt-image-1`)  
-- **Supabase**: Auth + Postgres (`materials`, `assignments`, `classes`, `students`, `profiles`, `xp_transactions`, `student_badges`)  
+- **Supabase**: Auth + Postgres — materiale, klasa, nxënës, Yje/Tituj, dhe cloud i plotë i të nxënit (profil, raporte, flashcards, Memory Booster, events)  
 - Fallback: `localStorage` (`localDb.ts`) kur `VITE_USE_SUPABASE=false`
 
 ---
@@ -545,7 +597,8 @@ Hape http://localhost:5173
 
 - Çelësi OpenAI është në frontend për demo — në prodhim duhet server  
 - Ngarkimi i PDF/Word si tekst i plotë është i kufizuar (më së miri ngjitja e tekstit)  
-- Politikat RLS MVP janë të hapura për hackathon — shtrëngoji para prodhimit
+- Politikat RLS MVP janë të hapura për hackathon — shtrëngoji para prodhimit  
+- Nuk ka hosting publik të paracaktuar — për jurisë: `npm run dev` lokalisht  
 
 ---
 
@@ -567,6 +620,7 @@ supabase/
   schema.sql              → materials + assignments
   schema_auth.sql         → auth profiles, classes, students
   schema_gamification.sql → XP (yje) + student badges (tituj)
+  schema_learning.sql     → profil, raporte, flashcards, Memory Booster, events
 ```
 
 ---
