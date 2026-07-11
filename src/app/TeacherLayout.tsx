@@ -1,13 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation, Outlet, useNavigate } from "react-router";
 import {
   LayoutDashboard, Users, BookOpen, BarChart3, Settings,
-  Bell, Search, ChevronLeft, ChevronRight, LogOut,
+  Bell, ChevronLeft, ChevronRight, LogOut,
   Award, Menu,
 } from "lucide-react";
 import { useApp } from "./store";
 import AccessibilityPanel from "./AccessibilityPanel";
 import { AccessibilityIcon } from "./AccessibilityIcon";
+import { AppLogo } from "./AppLogo";
 import { useT } from "./useT";
 import { Toaster } from "sonner";
 
@@ -18,6 +19,9 @@ export default function TeacherLayout() {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [headerHidden, setHeaderHidden] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
+  const lastScrollY = useRef(0);
 
   const navItems = [
     { to: "/teacher/dashboard", icon: LayoutDashboard, labelKey: "nav.dashboard" },
@@ -30,15 +34,40 @@ export default function TeacherLayout() {
 
   const handleLogout = () => { logout(); navigate("/"); };
 
+  useEffect(() => {
+    setHeaderHidden(false);
+    lastScrollY.current = 0;
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      const y = el.scrollTop;
+      const delta = y - lastScrollY.current;
+      if (y < 24) {
+        setHeaderHidden(false);
+      } else if (delta > 6) {
+        setHeaderHidden(true);
+      } else if (delta < -6) {
+        setHeaderHidden(false);
+      }
+      lastScrollY.current = y;
+    };
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       <div className={`flex items-center gap-3 px-4 py-5 ${collapsed ? "justify-center" : ""}`}>
-        <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center shrink-0 shadow-sm shadow-primary/30">
-          <span className="text-white font-extrabold text-lg">M</span>
-        </div>
+        <AppLogo size={40} className="shrink-0" />
         {!collapsed && (
           <div className="min-w-0">
-            <p className="font-extrabold text-sm text-foreground leading-tight truncate">MÃ«soLehtÃ« AI</p>
+            <p className="font-extrabold text-sm text-foreground leading-tight truncate">MësoLehtë AI</p>
             <p className="text-xs text-muted-foreground font-medium">{t("nav.teacherSpace")}</p>
           </div>
         )}
@@ -103,18 +132,14 @@ export default function TeacherLayout() {
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="h-16 bg-card/90 backdrop-blur-md border-b border-border flex items-center gap-3 px-4 sm:px-6 shrink-0">
+        <header
+          className={`h-16 bg-card/90 backdrop-blur-md border-b border-border flex items-center gap-3 px-4 sm:px-6 shrink-0 z-20 transition-transform duration-300 ease-out ${
+            headerHidden ? "-translate-y-full -mb-16" : "translate-y-0"
+          }`}
+        >
           <button onClick={() => setMobileOpen(true)} className="lg:hidden p-2.5 rounded-2xl hover:bg-muted min-h-11 min-w-11 flex items-center justify-center" aria-label="Menu">
             <Menu size={22} />
           </button>
-          <div className="flex-1 max-w-sm hidden sm:flex items-center gap-2.5 bg-muted/80 rounded-2xl px-4 py-2.5 border border-transparent focus-within:border-primary/30 focus-within:bg-card transition-colors">
-            <Search size={16} className="text-muted-foreground shrink-0" />
-            <input
-              placeholder={t("nav.search")}
-              className="bg-transparent text-sm outline-none w-full text-foreground placeholder:text-muted-foreground"
-              aria-label={t("nav.search")}
-            />
-          </div>
           <div className="ml-auto flex items-center gap-1">
             <button className="relative p-2.5 rounded-2xl hover:bg-muted transition-colors min-h-11 min-w-11 flex items-center justify-center" aria-label={t("nav.notifications")}>
               <Bell size={20} />
@@ -129,7 +154,7 @@ export default function TeacherLayout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main ref={mainRef} className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <Outlet />
         </main>
       </div>

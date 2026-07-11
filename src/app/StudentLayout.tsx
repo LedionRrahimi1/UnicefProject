@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation, Outlet, useNavigate } from "react-router";
 import { LayoutDashboard, Trophy, Settings, Bell, LogOut, Menu, X } from "lucide-react";
 import { useApp } from "./store";
 import AccessibilityPanel from "./AccessibilityPanel";
 import { AccessibilityIcon } from "./AccessibilityIcon";
+import { AppLogo } from "./AppLogo";
 import { useT } from "./useT";
 import { Toaster } from "sonner";
 
@@ -13,6 +14,9 @@ export default function StudentLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [headerHidden, setHeaderHidden] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
+  const lastScrollY = useRef(0);
 
   const navItems = [
     { to: "/student/dashboard", icon: LayoutDashboard, labelKey: "nav.dashboard" },
@@ -21,6 +25,33 @@ export default function StudentLayout() {
   ];
 
   const handleLogout = () => { logout(); navigate("/"); };
+
+  useEffect(() => {
+    setHeaderHidden(false);
+    lastScrollY.current = 0;
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      const y = el.scrollTop;
+      const delta = y - lastScrollY.current;
+      if (y < 24) {
+        setHeaderHidden(false);
+      } else if (delta > 6) {
+        setHeaderHidden(true);
+      } else if (delta < -6) {
+        setHeaderHidden(false);
+      }
+      lastScrollY.current = y;
+    };
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
 
   const NavLinks = ({ onNavigate }: { onNavigate?: () => void }) => (
     <nav className="flex-1 px-3 space-y-1">
@@ -47,9 +78,7 @@ export default function StudentLayout() {
 
       <aside className="hidden lg:flex flex-col w-60 bg-sidebar border-r border-sidebar-border shrink-0">
         <div className="flex items-center gap-3 px-4 py-5">
-          <div className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center shadow-sm shadow-primary/30">
-            <span className="text-white font-extrabold text-lg">M</span>
-          </div>
+          <AppLogo size={40} />
           <div>
             <p className="font-extrabold text-sm text-foreground leading-tight">MësoLehtë AI</p>
             <p className="text-xs text-muted-foreground font-medium">{t("nav.studentSpace")}</p>
@@ -78,9 +107,7 @@ export default function StudentLayout() {
       <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-sidebar border-r border-sidebar-border flex flex-col lg:hidden transition-transform duration-300 shadow-lg ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="flex items-center justify-between px-4 py-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-primary flex items-center justify-center">
-              <span className="text-white font-extrabold">M</span>
-            </div>
+            <AppLogo size={36} />
             <span className="font-extrabold text-sm">MësoLehtë AI</span>
           </div>
           <button onClick={() => setMobileOpen(false)} className="p-2.5 hover:bg-muted rounded-2xl min-h-11 min-w-11 flex items-center justify-center" aria-label={t("a11y.close")}>
@@ -91,7 +118,11 @@ export default function StudentLayout() {
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="h-16 bg-card/90 backdrop-blur-md border-b border-border flex items-center gap-3 px-4 sm:px-6 shrink-0">
+        <header
+          className={`h-16 bg-card/90 backdrop-blur-md border-b border-border flex items-center gap-3 px-4 sm:px-6 shrink-0 z-20 transition-transform duration-300 ease-out ${
+            headerHidden ? "-translate-y-full -mb-16" : "translate-y-0"
+          }`}
+        >
           <button onClick={() => setMobileOpen(true)} className="lg:hidden p-2.5 rounded-2xl hover:bg-muted min-h-11 min-w-11 flex items-center justify-center" aria-label="Menu">
             <Menu size={22} />
           </button>
@@ -112,7 +143,7 @@ export default function StudentLayout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8">
+        <main ref={mainRef} className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pb-24 lg:pb-8">
           <Outlet />
         </main>
 

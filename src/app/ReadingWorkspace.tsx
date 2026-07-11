@@ -6,12 +6,11 @@ import {
   BookOpen, List, Library, TrendingUp, X, Minus, Plus, ImageIcon, Loader2, Languages,
 } from "lucide-react";
 import * as Popover from "@radix-ui/react-popover";
-import * as Tabs from "@radix-ui/react-tabs";
 import { toast } from "sonner";
 import { useApp } from "./store";
-import { aiService, materialService, assignmentService, studentService } from "./services";
+import { aiService, materialService, assignmentService } from "./services";
 import { markSessionStart, trackLearningEvent } from "./learningTracker";
-import type { Material, VocabWord, Student } from "./types";
+import type { Material, VocabWord } from "./types";
 import { useT } from "./useT";
 
 export default function ReadingWorkspace() {
@@ -33,18 +32,16 @@ export default function ReadingWorkspace() {
   const [speed, setSpeed] = useState(1);
   const [progress, setProgress] = useState(10);
   const [audioProgress, setAudioProgress] = useState(0);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
   const [selectedText, setSelectedText] = useState("");
   const [floatingPos, setFloatingPos] = useState({ x: 0, y: 0 });
   const [floatingOpen, setFloatingOpen] = useState(false);
   const [explainResult, setExplainResult] = useState("");
   const [explaining, setExplaining] = useState(false);
   const [activeWord, setActiveWord] = useState<VocabWord | null>(null);
-  const [studentProfile, setStudentProfile] = useState<Student | null>(null);
   const [visualImage, setVisualImage] = useState<string | null>(null);
   const [visualLoading, setVisualLoading] = useState(false);
   const [readLang, setReadLang] = useState<"sq" | "en">("sq");
-  const visualMode = Boolean(studentProfile?.visualPreferred);
   const visualLoadedRef = useRef<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -254,12 +251,8 @@ export default function ReadingWorkspace() {
           type: "simplified_view",
           detail: "opened_reading",
         });
-        const [asgn, stu] = await Promise.all([
-          assignmentService.getByMaterialForStudent(m.id, user.id),
-          studentService.getById(user.id),
-        ]);
+        const asgn = await assignmentService.getByMaterialForStudent(m.id, user.id);
         if (asgn) await assignmentService.markInProgress(asgn.id);
-        setStudentProfile(stu ?? null);
       }
     });
   }, [id, user]);
@@ -289,17 +282,12 @@ export default function ReadingWorkspace() {
     }
   }, [visualImage]);
 
-  // Show teacher visuals for everyone; auto-generate on demand for visual learners
+  // Never auto-show figure — only when student clicks «Figurë»
   useEffect(() => {
-    if (!material) return;
-    if (visualLoadedRef.current === material.id) return;
-    if (material.illustrations?.length) {
-      visualLoadedRef.current = material.id;
-      setVisualImage(material.illustrations[0]);
-      return;
-    }
-    if (visualMode) void loadVisualForMaterial(material);
-  }, [material, visualMode, loadVisualForMaterial]);
+    setVisualImage(null);
+    setVisualLoading(false);
+    visualLoadedRef.current = null;
+  }, [material?.id]);
 
   useEffect(() => () => {
     stopSpeech();
@@ -342,6 +330,25 @@ export default function ReadingWorkspace() {
   ).split(". ").filter(Boolean).map(s => s.trim().replace(/\.$/, "") + ".");
 
   const hasEnglish = Boolean(material.englishText?.trim());
+  const es = material.enabledSections;
+  /** Hide if teacher turned off; otherwise only show when there is content. */
+  const showSection = (key: keyof NonNullable<Material["enabledSections"]>, hasContent: boolean) => {
+    if (es && es[key] === false) return false;
+    return hasContent;
+  };
+  const audioAllowed = material.audioEnabled !== false;
+  const hasSummary = showSection("summary", Boolean(material.summary?.trim()));
+  const hasKeyPoints = showSection("keyPoints", (material.keyPoints?.length ?? 0) > 0);
+  const hasVocab = showSection("vocab", (material.vocabulary?.length ?? 0) > 0);
+  const hasQuiz = showSection("quiz", (material.quiz?.length ?? 0) > 0);
+  const hasSidebarContent = hasSummary || hasKeyPoints || hasVocab;
+  const sidebarTabs = [
+    ...(hasSummary ? [{ id: "summary", icon: BookOpen, label: t("rw.summary") }] : []),
+    ...(hasKeyPoints ? [{ id: "keypoints", icon: List, label: t("rw.keyPoints") }] : []),
+    ...(hasVocab ? [{ id: "vocab", icon: Library, label: t("rw.vocab") }] : []),
+  ];
+  const activeSectionSafe =
+    activeSection && sidebarTabs.some(tab => tab.id === activeSection) ? activeSection : null;
 
   const switchLang = (lang: "sq" | "en") => {
     if (lang === readLang) return;
@@ -418,95 +425,225 @@ export default function ReadingWorkspace() {
             className={`p-2 rounded-xl text-xs font-medium transition-colors flex items-center gap-1 ${focusMode ? "bg-primary text-primary-foreground" : "border border-border hover:bg-muted"}`}>
             <Focus size={14} /> {t("rw.focus")}
           </button>
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 rounded-xl border border-border hover:bg-muted transition-colors" aria-label={t("rw.openSidebar")}>
-            <BookOpen size={16} />
-          </button>
         </div>
       </div>
 
       <div className="flex gap-5 items-start">
-        {/* Main reading area — natural height, page scrolls */}
         <div className="flex-1 min-w-0 space-y-4">
-          {/* Reading toolbar */}
-          <div className="bg-card border border-border rounded-2xl p-3 flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1">
-              <button onClick={() => setFontSize(f => Math.max(14, f - 2))} className="p-1.5 rounded-lg hover:bg-muted transition-colors" aria-label="Zvogëlo tekstin">
-                <ZoomOut size={14} />
-              </button>
-              <span className="text-xs text-muted-foreground w-10 text-center">{fontSize}px</span>
-              <button onClick={() => setFontSize(f => Math.min(28, f + 2))} className="p-1.5 rounded-lg hover:bg-muted transition-colors" aria-label="Zmadhëso tekstin">
-                <ZoomIn size={14} />
-              </button>
-            </div>
-            <div className="w-px h-5 bg-border" />
-            <div className="flex items-center gap-1">
-              <button onClick={() => setLineSpacing(s => Math.max(1.4, s - 0.2))} className="p-1.5 rounded-lg hover:bg-muted transition-colors" aria-label="Pakëso hapësirën">
-                <Minus size={14} />
-              </button>
-              <AlignJustify size={14} className="text-muted-foreground" />
-              <button onClick={() => setLineSpacing(s => Math.min(2.5, s + 0.2))} className="p-1.5 rounded-lg hover:bg-muted transition-colors" aria-label="Rrit hapësirën">
-                <Plus size={14} />
-              </button>
-            </div>
-            <div className="w-px h-5 bg-border" />
-            <button type="button" onClick={togglePlay} disabled={audioLoading}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors disabled:opacity-60 ${playing ? "bg-primary text-primary-foreground" : "border border-border hover:bg-muted"}`}>
-              {audioLoading ? (
-                <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-              ) : playing ? <Pause size={13} /> : <Headphones size={13} />}
-              {audioLoading ? t("rw.preparing") : playing ? t("rw.stop") : readLang === "en" ? t("rw.listenEn") : t("rw.listen")}
-            </button>
-            {hasEnglish && (
-              <div className="flex items-center rounded-xl border border-border overflow-hidden text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => switchLang("sq")}
-                  className={`px-2.5 py-1.5 transition-colors ${readLang === "sq" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
-                >
-                  SQ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => switchLang("en")}
-                  className={`px-2.5 py-1.5 flex items-center gap-1 transition-colors ${readLang === "en" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
-                >
-                  <Languages size={12} /> EN
-                </button>
+          {/* Teacher sections — at top; click to reveal content */}
+          {hasSidebarContent && (
+            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+              <div className="px-4 pt-4 pb-2">
+                <p className="text-sm font-bold text-foreground">{t("rw.sectionsTitle")}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{t("rw.sectionsHint")}</p>
               </div>
-            )}
-            <button
-              type="button"
-              onClick={() => material && void loadVisualForMaterial(material)}
-              disabled={visualLoading || !material}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors disabled:opacity-60 ${
-                visualImage ? "bg-primary/10 text-primary border border-primary/20" : "border border-border hover:bg-muted"
-              }`}
-            >
-              {visualLoading ? <Loader2 size={13} className="animate-spin" /> : <ImageIcon size={13} />}
-              {t("rw.figure")}
-            </button>
-          </div>
 
-          {visualMode && (
-            <div className="flex items-center gap-2 text-xs font-semibold text-primary bg-primary/10 rounded-2xl px-4 py-2.5">
-              <ImageIcon size={14} /> {t("rw.visualMode")}
+              <div
+                className="px-3 pb-3 flex flex-wrap gap-2"
+                role="tablist"
+                aria-label={t("rw.sectionsTitle")}
+              >
+                {sidebarTabs.map(tab => {
+                  const active = tab.id === activeSectionSafe;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() =>
+                        setActiveSection(prev => (prev === tab.id ? null : tab.id))
+                      }
+                      className={`inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-sm font-semibold border transition-colors min-h-11 ${
+                        active
+                          ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                          : "bg-muted/40 text-foreground border-border hover:border-primary/40 hover:bg-primary/5"
+                      }`}
+                    >
+                      <tab.icon size={16} strokeWidth={active ? 2.5 : 2} />
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {activeSectionSafe && (
+                <div className="px-4 sm:px-5 py-4 border-t border-border bg-muted/10" role="tabpanel">
+                  {activeSectionSafe === "summary" && hasSummary && (
+                    <p className="text-sm sm:text-base leading-relaxed text-foreground">{material.summary}</p>
+                  )}
+                  {activeSectionSafe === "keypoints" && hasKeyPoints && (
+                    <ul className="space-y-2.5">
+                      {material.keyPoints.map((pt, i) => (
+                        <li key={i} className="flex items-start gap-3 text-sm sm:text-base">
+                          <span className="w-6 h-6 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                            {i + 1}
+                          </span>
+                          <span className="leading-relaxed">{pt}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {activeSectionSafe === "vocab" && hasVocab && (
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {material.vocabulary.map(v => (
+                        <div key={v.word} className="rounded-xl border border-border bg-card p-3.5">
+                          <p className="font-bold text-sm text-primary">{v.word}</p>
+                          <p className="text-sm text-foreground mt-1.5 leading-relaxed">{v.definition}</p>
+                          {v.example && (
+                            <p className="text-xs text-muted-foreground mt-2">{t("rw.example")} {v.example}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
+          {/* Reading tools + single audio control */}
+          <div className="bg-card border border-border rounded-2xl overflow-hidden">
+            <div className="p-2.5 sm:p-3 flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-0.5 rounded-xl bg-muted/60 p-0.5">
+                <button type="button" onClick={() => setFontSize(f => Math.max(14, f - 2))} className="p-2 rounded-lg hover:bg-card transition-colors" aria-label="Zvogëlo tekstin">
+                  <ZoomOut size={14} />
+                </button>
+                <span className="text-xs text-muted-foreground w-9 text-center tabular-nums">{fontSize}</span>
+                <button type="button" onClick={() => setFontSize(f => Math.min(28, f + 2))} className="p-2 rounded-lg hover:bg-card transition-colors" aria-label="Zmadhëso tekstin">
+                  <ZoomIn size={14} />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-0.5 rounded-xl bg-muted/60 p-0.5">
+                <button type="button" onClick={() => setLineSpacing(s => Math.max(1.4, s - 0.2))} className="p-2 rounded-lg hover:bg-card transition-colors" aria-label="Pakëso hapësirën">
+                  <Minus size={14} />
+                </button>
+                <AlignJustify size={14} className="text-muted-foreground mx-0.5" />
+                <button type="button" onClick={() => setLineSpacing(s => Math.min(2.5, s + 0.2))} className="p-2 rounded-lg hover:bg-card transition-colors" aria-label="Rrit hapësirën">
+                  <Plus size={14} />
+                </button>
+              </div>
+
+              <div className="flex-1 min-w-2" />
+
+              {hasEnglish && (
+                <div className="flex items-center rounded-xl border border-border overflow-hidden text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => switchLang("sq")}
+                    className={`px-2.5 py-1.5 transition-colors ${readLang === "sq" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                  >
+                    SQ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => switchLang("en")}
+                    className={`px-2.5 py-1.5 flex items-center gap-1 transition-colors ${readLang === "en" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                  >
+                    <Languages size={12} /> EN
+                  </button>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (visualImage) {
+                    setVisualImage(null);
+                    visualLoadedRef.current = null;
+                    return;
+                  }
+                  if (material) void loadVisualForMaterial(material);
+                }}
+                disabled={visualLoading || !material}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors disabled:opacity-60 ${
+                  visualImage ? "bg-primary/10 text-primary border border-primary/20" : "border border-border hover:bg-muted"
+                }`}
+              >
+                {visualLoading ? <Loader2 size={13} className="animate-spin" /> : <ImageIcon size={13} />}
+                {visualImage ? t("rw.hideFigure") : t("rw.showFigure")}
+              </button>
+            </div>
+
+            {audioAllowed && (
+              <div className="border-t border-border px-3 py-2.5 flex items-center gap-2.5 flex-wrap bg-muted/20">
+                <button
+                  type="button"
+                  onClick={togglePlay}
+                  disabled={audioLoading}
+                  className="h-9 min-w-[7.5rem] px-3.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-primary/90 transition-colors disabled:opacity-60 shrink-0"
+                  aria-label={playing ? t("rw.stop") : t("rw.listen")}
+                >
+                  {audioLoading ? (
+                    <span className="w-3.5 h-3.5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                  ) : playing ? (
+                    <Pause size={14} />
+                  ) : (
+                    <Play size={14} />
+                  )}
+                  {audioLoading ? t("rw.preparing") : playing ? t("rw.stop") : readLang === "en" ? t("rw.listenEn") : t("rw.listen")}
+                </button>
+
+                <button type="button" onClick={skipBack} disabled={audioLoading || !audioReady} className="p-2 rounded-lg hover:bg-muted disabled:opacity-35" aria-label="Pjesa e mëparshme">
+                  <SkipBack size={15} />
+                </button>
+
+                <div className="flex-1 min-w-[100px] h-1.5 bg-muted rounded-full relative overflow-hidden">
+                  <div className="absolute inset-y-0 left-0 bg-primary rounded-full transition-all" style={{ width: `${audioProgress}%` }} />
+                </div>
+
+                <button type="button" onClick={skipForward} disabled={audioLoading || !audioReady} className="p-2 rounded-lg hover:bg-muted disabled:opacity-35" aria-label="Pjesa e radhës">
+                  <SkipForward size={15} />
+                </button>
+
+                <div className="flex items-center gap-1.5">
+                  <Volume2 size={14} className="text-muted-foreground shrink-0" />
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={volume}
+                    onChange={e => setVolume(Number(e.target.value))}
+                    className="w-16 accent-primary"
+                    aria-label={t("rw.volume")}
+                  />
+                </div>
+
+                <div className="flex gap-0.5 rounded-lg bg-muted/70 p-0.5">
+                  {[0.75, 1, 1.25].map(s => (
+                    <button
+                      type="button"
+                      key={s}
+                      onClick={() => setSpeed(s)}
+                      className={`text-[11px] font-semibold px-2 py-1 rounded-md transition-colors ${
+                        speed === s ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {s}×
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           {(visualLoading || visualImage) && (
-            <div className="rounded-2xl overflow-hidden border border-border bg-white dark:bg-muted/40">
+            <div className="flex justify-center">
               {visualLoading && !visualImage && (
-                <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
-                  <Loader2 size={22} className="animate-spin text-primary" />
-                  <span className="text-xs font-semibold">{t("rw.creatingImage")}</span>
+                <div className="inline-flex flex-col items-center gap-2 px-6 py-8 rounded-2xl border border-dashed border-border text-muted-foreground">
+                  <Loader2 size={20} className="animate-spin text-primary" />
+                  <span className="text-xs font-medium">{t("rw.creatingImage")}</span>
                 </div>
               )}
               {visualImage && (
-                <img
-                  src={visualImage}
-                  alt={`Ilustrim për: ${material.title}`}
-                  className="w-full h-auto max-h-[420px] object-contain mx-auto block"
-                />
+                <figure className="inline-flex max-w-full rounded-2xl overflow-hidden border border-border bg-card">
+                  <img
+                    src={visualImage}
+                    alt={`Ilustrim për: ${material.title}`}
+                    className="block w-auto h-auto max-w-full max-h-[min(320px,45vh)] object-contain"
+                  />
+                </figure>
               )}
             </div>
           )}
@@ -636,49 +773,8 @@ export default function ReadingWorkspace() {
             </div>
           )}
 
-          {/* Audio player */}
-          <div className="bg-card border border-border p-4 rounded-2xl">
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-              <Headphones size={12} />
-              {audioLoading
-                ? "Duke gjeneruar zërin... (disa sekonda)"
-                : readLang === "en"
-                  ? "Listen to the text in English. Adjust volume and speed."
-                  : "Dëgjo tekstin me zë në shqip. Mund të ndryshosh volumin dhe shpejtësinë."}
-            </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <button type="button" onClick={togglePlay} disabled={audioLoading}
-                className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 transition-colors disabled:opacity-60 shrink-0" aria-label={playing ? t("rw.stop") : t("rw.listen")}>
-                {audioLoading ? (
-                  <span className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                ) : playing ? <Pause size={18} /> : <Play size={18} />}
-              </button>
-              <button type="button" onClick={skipBack} disabled={audioLoading || !audioReady} className="p-2 rounded-lg hover:bg-muted disabled:opacity-40" aria-label="Pjesa e mëparshme">
-                <SkipBack size={16} />
-              </button>
-              <div className="flex-1 min-w-[120px] h-1.5 bg-muted rounded-full relative overflow-hidden">
-                <div className="absolute inset-y-0 left-0 bg-primary rounded-full transition-all" style={{ width: `${audioProgress}%` }} />
-              </div>
-              <button type="button" onClick={skipForward} disabled={audioLoading || !audioReady} className="p-2 rounded-lg hover:bg-muted disabled:opacity-40" aria-label="Pjesa e radhës">
-                <SkipForward size={16} />
-              </button>
-              <div className="flex items-center gap-1">
-                <Volume2 size={14} className="text-muted-foreground" />
-                <input type="range" min={0} max={100} value={volume} onChange={e => setVolume(Number(e.target.value))}
-                  className="w-16 accent-primary" aria-label={t("rw.volume")} />
-              </div>
-              <div className="flex gap-1">
-                {[0.75, 1, 1.25].map(s => (
-                  <button type="button" key={s} onClick={() => setSpeed(s)}
-                    className={`text-xs px-2 py-1 rounded-lg transition-colors ${speed === s ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
-                    {s}×
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
           {/* Start quiz CTA */}
+          {hasQuiz && (
           <div className="bg-secondary border border-primary/15 rounded-2xl p-5 flex items-center justify-between gap-3 shadow-sm flex-wrap">
             <div>
               <p className="font-semibold text-secondary-foreground">{t("rw.readyQuiz")}</p>
@@ -689,54 +785,8 @@ export default function ReadingWorkspace() {
               {t("rw.startQuiz")}
             </button>
           </div>
+          )}
         </div>
-
-        {/* Sidebar */}
-        {sidebarOpen && (
-          <div className="w-72 shrink-0 hidden lg:block sticky top-4">
-            <div className="bg-card border border-border rounded-2xl overflow-hidden max-h-[calc(100vh-6rem)] flex flex-col">
-              <Tabs.Root defaultValue="summary" className="flex flex-col min-h-0">
-                <Tabs.List className="flex border-b border-border bg-muted/30 shrink-0" aria-label="Informacion shtesë">
-                  {[
-                    { id: "summary", icon: BookOpen, label: t("rw.summary") },
-                    { id: "keypoints", icon: List, label: t("rw.keyPoints") },
-                    { id: "vocab", icon: Library, label: t("rw.vocab") },
-                  ].map(tab => (
-                    <Tabs.Trigger key={tab.id} value={tab.id}
-                      className="flex-1 flex flex-col items-center gap-1 py-3 text-xs font-medium border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary border-transparent text-muted-foreground hover:text-foreground transition-colors">
-                      <tab.icon size={14} /> {tab.label}
-                    </Tabs.Trigger>
-                  ))}
-                </Tabs.List>
-                <div className="p-4 overflow-y-auto">
-                  <Tabs.Content value="summary">
-                    <p className="text-sm leading-relaxed text-foreground">{material.summary}</p>
-                  </Tabs.Content>
-                  <Tabs.Content value="keypoints">
-                    <ul className="space-y-2">
-                      {material.keyPoints.map((pt, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm">
-                          <div className="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">{i + 1}</div>
-                          {pt}
-                        </li>
-                      ))}
-                    </ul>
-                  </Tabs.Content>
-                  <Tabs.Content value="vocab">
-                    <div className="space-y-3">
-                      {material.vocabulary.map(v => (
-                        <div key={v.word} className="border border-border rounded-xl p-3">
-                          <p className="font-semibold text-sm text-primary">{v.word}</p>
-                          <p className="text-xs text-foreground mt-1">{v.definition}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </Tabs.Content>
-                </div>
-              </Tabs.Root>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

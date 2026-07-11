@@ -80,6 +80,10 @@ function loadSessionStarts(): Record<string, number> {
   }
 }
 
+export function getAllLearningEvents(): LearningEvent[] {
+  return loadEvents();
+}
+
 export function clearSessionStart(studentId: string, materialId: string) {
   const key = `${studentId}:${materialId}`;
   const map = loadSessionStarts();

@@ -1,273 +1,7 @@
 # MësoLehtë AI
 
-**[Shqip](#shqip)** · **[English](#english)**
 
-**Materiale mësimore që adaptohen për çdo nxënës.**  
-*Learning materials that adapt for every student.*
-
-> Mentors / jury: **Albanian starts below**. Full **English** version is further down → [jump to English](#english).
-
-**GitHub:** https://github.com/LedionRrahimi1/UnicefProject
-
----
-
-# Shqip
-
-MësoLehtë AI është platformë edukative për shkolla: mësuesja ngarkon një tekst të vështirë, AI e përshtat sipas nevojave të nxënësve, dhe mësuesja mbetet gjithmonë në kontroll — rishikon, ndryshon dhe publikon.
-
-
-## Problemi që zgjidhim
-
-Shumë nxënës e kanë të vështirë tekstin e klasës. Materiali i njëjtë për të gjithë lë disa fëmijë mbrapa. Mësuesit e dinë këtë, por përgatitja e versioneve individuale merr shumë kohë.
-
-MësoLehtë e shkurton atë kohë: **AI propozon, mësuesja vendos.**
-
-Ne nuk krahasojmë fëmijët me njëri-tjetrin. Në vend të “XP” dhe “badge”, në UI përdorim **Yje** dhe **Tituj** — inkurajim, jo konkurrencë.
-
----
-
-## Features kryesore (çfarë ja vlen të shihet)
-
-### Për mësuesen
-- Krijim materiali (ngjit tekst ose ngarko skedar)
-- Zgjedhje e klasës ose e nxënësve të caktuar
-- **Adaptim sipas nevojave të secilit** me një klik (jo hyrje një nga një)
-- Nivele thjeshtësimi, gjatësi teksti, numër pyetjesh
-- Elementet e gjenerimit: përmbledhje, pika kryesore, fjalor, kuiz, përkthim EN, vizualizime, shënime për mësuesen
-- Review i plotë para publikimit (editim, miratim, publikim)
-- Menaxhim klasash dhe preferenca nxënësish (vizual, audio, nivel leximi)
-- Analytics për klasën (përfundim, rezultate, kush ka nevojë për mbështetje)
-- Shpërblime manuale: Yje dhe Tituj nga mësuesja
-
-### Për nxënësin
-- Panel detyrash (në pritje / në vazhdim / të përfunduara)
-- Hapësirë leximi me fjalor, focus mode, madhësi dhe hapësirë teksti
-- Shpjegim i fjalisë së zgjedhur me AI
-- **Dëgjo** me zë real (TTS shqip dhe anglisht)
-- Figura / ilustrime AI (veçanërisht për nxënës vizualë)
-- Lexim SQ / EN kur materiali ka përkthim
-- Kuiz me hint, feedback dhe shpjegim te përgjigjja e gabuar
-- Rezultate + plan studimi + Memory Booster (flashcards, përsëritje 1/3/7 ditë)
-- Ushtrime me flashcards
-- Yje, nivele dhe tituj
-
-### Aksesueshmëri & gjuhë
-- Panel aksesueshmërie (font Lexend / Atkinson, kontrast, dark mode, motion)
-- UI dygjuhësh: **Shqip / English**
-- Dizajn i qetë, i lexueshëm për klasë
-
----
-
-## Si funksionon AI — adaptimi i përmbajtjes
-
-Ky është zemra e produktit. Më poshtë është rrjedha e plotë e AI për përmbajtjen mësimore.
-
-### 1. Hyrja: çfarë merr AI
-
-Mësuesja jep:
-- tekstin origjinal (nga libri, PDF, ose i shkruar)
-- titullin dhe lëndën
-- nivelin e thjeshtësimit (i lehtë / mesatar / i avancuar)
-- gjatësinë e dëshiruar
-- numrin e pyetjeve të kuizit
-- cilat elemente të gjenerohen (përmbledhje, fjalor, kuiz, EN, figura…)
-
-Nëse është e ndezur **“Adapto sipas nevojave të secilit”**, sistemi lexon edhe profilin e çdo nxënësi të zgjedhur:
-- nivel leximi (Bazik / Mesatar / Avancuar)
-- preferencë vizuale
-- preferencë audio
-- nevoja dhe formate nga profili mësimor (nëse ekziston nga kuizet e mëparshme)
-
-### 2. Grupimi inteligjent (jo 20 versione të panevojshme)
-
-Para se të thirret AI shumë herë, nxënësit grupohen sipas nevojave të ngjashme, p.sh.:
-- **Vizual · Bazik**
-- **Vizual**
-- **Audio · Bazik**
-- **Bazik**
-- **Audio**
-- **Avancuar**
-- **Standard** (mesatar)
-
-Secili grup merr **një** adaptim. Nxënësit me nevoja të njëjta ndajnë të njëjtin version. Kështu mësuesja rishikon pak variante, jo një për çdo emër.
-
-Për çdo grup, sistemi ndërton **learner hints** (udhëzime pedagogjike), p.sh.:
-- “përdor figura dhe shembuj konkretë”
-- “fjali të shkurtra, hap pas hapi”
-- “tekst i qartë për dëgjim”
-- “më shumë detaje dhe pyetje që nxisin të menduarit” (për avancuar)
-
-Këto janë udhëzime **pedagogjike**, jo diagnoza mjekësore.
-
-### 3. Thirrja kryesore e adaptimit (`adaptMaterial`)
-
-Për çdo grup, AI (model chat OpenAI) merr tekstin + parametrat + hints dhe kthen strukturuar:
-
-| Output | Përshkrim |
-|--------|-----------|
-| **Tekst i thjeshtësuar** | I njëjti përmbajtje, gjuhë e përshtatur nivelit të grupit |
-| **Përmbledhje** | Ideja kryesore në pak fjali |
-| **Pikat kryesore** | Lista e shkurtër për ripërsëritje |
-| **Fjalor** | Fjalë të vështira + përkufizim, sinonim, shembull, përkthim EN |
-| **Kuiz** | Pyetje (multiple, po/jo, e shkurtër, ideja kryesore) me hint dhe feedback |
-| **Shënime për mësuesen** | Çfarë të vëzhgojë / si ta mbështesë klasën |
-| **Përkthim EN** | (opsionale) version anglisht i tekstit të thjeshtësuar |
-| **Prompt-e vizuale** | (opsionale) përshkrime skenash për gjenerimin e figurave |
-
-Niveli i thjeshtësimit mund të **mbishkruhet automatikisht** për grupin (p.sh. Bazik → më i thjeshtë; Avancuar → më i detajuar), edhe nëse mësuesja ka zgjedhur një nivel bazë.
-
-### 4. Figura (AI Images)
-
-Nëse vizualizimet janë të ndezura (ose grupi është vizual), AI Images gjeneron ilustrim edukativ për fëmijë — i thjeshtë, pa tekst të panevojshëm në figurë. Figura ruhet me materialin dhe shfaqet te leximi / kuizi.
-
-### 5. Ruajtja dhe shpërndarja
-
-Çdo version i adaptuar ruhet si material i veçantë me etiketë (p.sh. `Fotosinteza (Vizual · Bazik)`), i lidhur me nxënësit e atij grupi.
-
-Kur mësuesja **publikon**, detyrat krijohen **vetëm për nxënësit e synuar** të atij versioni — jo material i njëjtë për krejt klasën nëse keni variante.
-
-### 6. AI gjatë leximit (pas publikimit)
-
-Ndërsa nxënësi lexon:
-- **Fjalori** — fjalët e vështira hapen me përkufizim (nga adaptimi)
-- **Shpjego fjali** — nxënësi zgjedh tekst → AI shpjegon thjeshtë / jep shembull / ideja kryesore / përkthen
-- **TTS** — teksti lexohet me zë (shqip ose anglisht), me volum dhe shpejtësi
-- **Figurë** — shfaqet automatikisht për vizualë ose kërkohet me buton
-
-### 7. AI në kuiz
-
-- Hint dhe feedback nga adaptimi fillestar
-- Te përgjigjja e gabuar: AI jep shpjegim + shembull (zëri nuk niset automatikisht; nxënësi shtyp **Dëgjo** nëse do)
-- Mund të gjenerohen pyetje më të lehta praktikuese midis kuizit
-- Për nxënës vizualë: figura ndihmëse për pyetjen / shpjegimin
-
-### 8. AI pas kuizit — “mësimi që mëson”
-
-Pas përfundimit, AI analizojnë sesionin (pa etiketuar fëmijën me diagnoza) dhe prodhon:
-- mesazh mbështetës për nxënësin
-- plan studimi të shkurtër
-- përditësim të **profilit mësimor** (forca, nevoja, formate të preferuara)
-- **Memory Booster**: përmbledhje e shkurtër, flashcards, pyetje ripërsëritjeje, orar 1 / 3 / 7 ditë
-
-Ky profil përdoret në adaptimet e ardhshme → cikli mbyllet: **sa më shumë përdoret, aq më i personalizuar bëhet materiali**.
-
-### 9. Parimet pedagogjike që ndjek AI
-
-- Gjuha e thjeshtë, e ngrohtë, e përshtatshme për moshën shkollore
-- I njëjti koncept shkencor — jo përmbajtje e gabuar “e lehtësuar”
-- Jo diagnoza mjekësore / etiketim klinik
-- Mësuesja gjithmonë mund të editojë dhe të refuzojë draftin e AI
-
-### Skema e shkurtër e rrjedhës
-
-```
-Tekst origjinal
-    ↓
-Zgjedhje nxënësish + preferenca
-    ↓
-Grupim sipas nevojave (Vizual / Bazik / Avancuar / …)
-    ↓
-AI adaptim për çdo grup  →  tekst + fjalor + kuiz + (EN) + (figura)
-    ↓
-Mësuesja rishikon & publikon
-    ↓
-Nxënësi lexon / dëgjon / bën kuiz
-    ↓
-AI profil + Memory Booster
-    ↓
-(hints për adaptimin e radhës)
-```
-
----
-
-## Si të provohet (demo)
-
-1. Hyr si mësuese: `mesuesi@mesolehte.com` / `demo123`
-2. **Krijo material** → ngjit tekst → zgjidh klasën / nxënësit  
-3. Lë të ndezur **“Adapto sipas nevojave të secilit”** → **Adapto me AI**  
-4. Te **Materialet** do të shohësh versionet (etiketa: Vizual, Bazik, Avancuar…)  
-5. Hap review → **Mirato** → **Publiko**  
-6. Dil dhe hyr si nxënës: `nxenesi@mesolehte.com` / `demo123`  
-7. Hap detyrën → lexo / dëgjo → kuiz → rezultate  
-
-Të dhënat ruhen në `localStorage` të browser-it (nuk ka databazë ende) — mësuesja dhe nxënësi duhet të jenë në **të njëjtin browser**.
-
----
-
-## Si ta nisësh lokalisht
-
-Duhet Node.js 18+ dhe një çelës OpenAI.
-
-```bash
-git clone https://github.com/LedionRrahimi1/UnicefProject.git
-cd UnicefProject
-npm install
-cp .env.example .env
-```
-
-Në `.env`:
-
-```
-VITE_OPENAI_API_KEY=sk-proj-...
-```
-
-```bash
-npm run dev
-```
-
-Hape http://localhost:5173  
-
-**Kujdes:** `.env` nuk shkon në GitHub. Mos e commit-o çelësin.
-
----
-
-## Stack
-
-- React, TypeScript, Vite, Tailwind CSS  
-- React Router, Radix UI, Recharts, Lucide  
-- OpenAI: chat (`gpt-5.6-sol`), TTS (`gpt-4o-mini-tts`), Images (`gpt-image-1`)  
-- Ruajtje lokale: `localStorage` (`localDb.ts`)
-
----
-
-## Kufizimet 
-
-- Pa backend / databazë: demo në të njëjtin browser  
-- Çelësi OpenAI është në frontend për demo — në prodhim duhet server  
-- Ngarkimi i PDF/Word si tekst i plotë është i kufizuar (më së miri ngjitja e tekstit)
-
----
-
-## Struktura e shkurtër
-
-```
-src/app/
-  MaterialCreate.tsx      → krijimi + adaptimi personal
-  adaptationCohorts.ts    → grupimi sipas nevojave
-  MaterialReview.tsx      → rishikimi + publikimi
-  ReadingWorkspace.tsx    → leximi + TTS + figura
-  Quiz.tsx / Results.tsx  → kuiz + Memory Booster
-  openai.ts               → adaptim, TTS, figura
-  openaiLearning.ts       → profil + raporte pas kuizit
-  services.ts / localDb.ts
-```
-
----
-
-## License
-
-Projekt për hackathon / UNICEF.  
-Demo edukativ — MësoLehtë AI.
-
----
----
-
----
----
-
-# English
-
-> This is the full English version of the README.
+# English Language:
 
 **Learning materials that adapt for every student.**
 
@@ -520,3 +254,261 @@ src/app/
 Hackathon / UNICEF project.  
 Educational demo — MësoLehtë AI.
 
+
+Albanian Language:
+
+# MësoLehtë AI
+
+**Materiale mësimore që adaptohen për çdo nxënës.**
+
+MësoLehtë AI është platformë edukative për shkolla: mësuesja ngarkon një tekst, AI e përshtat sipas nevojave të nxënësve, dhe mësuesja mbetet gjithmonë në kontroll — rishikon, ndryshon dhe publikon.
+
+**GitHub:** https://github.com/LedionRrahimi1/UnicefProject
+
+---
+
+## Problemi që zgjidhim
+
+Shumë nxënës e kanë të vështirë tekstin e klasës. Materiali i njëjtë për të gjithë lë disa fëmijë mbrapa. Mësuesit e dinë këtë, por përgatitja e versioneve individuale merr shumë kohë.
+
+MësoLehtë e shkurton atë kohë: **AI propozon, mësuesja vendos.**
+
+Ne nuk krahasojmë fëmijët me njëri-tjetrin. Në vend të “XP” dhe “badge”, në UI përdorim **Yje** dhe **Tituj** — inkurajim, jo konkurrencë.
+
+---
+
+## Features kryesore (çfarë ja vlen të shihet)
+
+### Për mësuesen
+- Krijim materiali (ngjit tekst ose ngarko skedar)
+- Zgjedhje e klasës ose e nxënësve të caktuar
+- **Adaptim sipas nevojave të secilit** me një klik (jo hyrje një nga një)
+- Nivele thjeshtësimi, gjatësi teksti, numër pyetjesh
+- Elementet e gjenerimit: përmbledhje, pika kryesore, fjalor, kuiz, përkthim EN, vizualizime, shënime për mësuesen
+- Review i plotë para publikimit (editim, miratim, publikim)
+- Menaxhim klasash dhe preferenca nxënësish (vizual, audio, nivel leximi)
+- Analytics për klasën (përfundim, rezultate, kush ka nevojë për mbështetje)
+- Shpërblime manuale: Yje dhe Tituj nga mësuesja
+
+### Për nxënësin
+- Panel detyrash (në pritje / në vazhdim / të përfunduara)
+- Hapësirë leximi me fjalor, focus mode, madhësi dhe hapësirë teksti
+- Shpjegim i fjalisë së zgjedhur me AI
+- **Dëgjo** me zë real (TTS shqip dhe anglisht)
+- Figura / ilustrime AI (veçanërisht për nxënës vizualë)
+- Lexim SQ / EN kur materiali ka përkthim
+- Kuiz me hint, feedback dhe shpjegim te përgjigjja e gabuar
+- Rezultate + plan studimi + Memory Booster (flashcards, përsëritje 1/3/7 ditë)
+- Ushtrime me flashcards
+- Yje, nivele dhe tituj
+
+### Aksesueshmëri & gjuhë
+- Panel aksesueshmërie (font Lexend / Atkinson, kontrast, dark mode, motion)
+- UI dygjuhësh: **Shqip / English**
+- Dizajn i qetë, i lexueshëm për klasë
+
+---
+
+## Si funksionon AI — adaptimi i përmbajtjes
+
+Ky është zemra e produktit. Më poshtë është rrjedha e plotë e AI për përmbajtjen mësimore.
+
+### 1. Hyrja: çfarë merr AI
+
+Mësuesja jep:
+- tekstin origjinal (nga libri, PDF, ose i shkruar)
+- titullin dhe lëndën
+- nivelin e thjeshtësimit (i lehtë / mesatar / i avancuar)
+- gjatësinë e dëshiruar
+- numrin e pyetjeve të kuizit
+- cilat elemente të gjenerohen (përmbledhje, fjalor, kuiz, EN, figura…)
+
+Nëse është e ndezur **“Adapto sipas nevojave të secilit”**, sistemi lexon edhe profilin e çdo nxënësi të zgjedhur:
+- nivel leximi (Bazik / Mesatar / Avancuar)
+- preferencë vizuale
+- preferencë audio
+- nevoja dhe formate nga profili mësimor (nëse ekziston nga kuizet e mëparshme)
+
+### 2. Grupimi inteligjent (jo 20 versione të panevojshme)
+
+Para se të thirret AI shumë herë, nxënësit grupohen sipas nevojave të ngjashme, p.sh.:
+- **Vizual · Bazik**
+- **Vizual**
+- **Audio · Bazik**
+- **Bazik**
+- **Audio**
+- **Avancuar**
+- **Standard** (mesatar)
+
+Secili grup merr **një** adaptim. Nxënësit me nevoja të njëjta ndajnë të njëjtin version. Kështu mësuesja rishikon pak variante, jo një për çdo emër.
+
+Për çdo grup, sistemi ndërton **learner hints** (udhëzime pedagogjike), p.sh.:
+- “përdor figura dhe shembuj konkretë”
+- “fjali të shkurtra, hap pas hapi”
+- “tekst i qartë për dëgjim”
+- “më shumë detaje dhe pyetje që nxisin të menduarit” (për avancuar)
+
+Këto janë udhëzime **pedagogjike**, jo diagnoza mjekësore.
+
+### 3. Thirrja kryesore e adaptimit (`adaptMaterial`)
+
+Për çdo grup, AI (model chat OpenAI) merr tekstin + parametrat + hints dhe kthen strukturuar:
+
+| Output | Përshkrim |
+|--------|-----------|
+| **Tekst i thjeshtësuar** | I njëjti përmbajtje, gjuhë e përshtatur nivelit të grupit |
+| **Përmbledhje** | Ideja kryesore në pak fjali |
+| **Pikat kryesore** | Lista e shkurtër për ripërsëritje |
+| **Fjalor** | Fjalë të vështira + përkufizim, sinonim, shembull, përkthim EN |
+| **Kuiz** | Pyetje (multiple, po/jo, e shkurtër, ideja kryesore) me hint dhe feedback |
+| **Shënime për mësuesen** | Çfarë të vëzhgojë / si ta mbështesë klasën |
+| **Përkthim EN** | (opsionale) version anglisht i tekstit të thjeshtësuar |
+| **Prompt-e vizuale** | (opsionale) përshkrime skenash për gjenerimin e figurave |
+
+Niveli i thjeshtësimit mund të **mbishkruhet automatikisht** për grupin (p.sh. Bazik → më i thjeshtë; Avancuar → më i detajuar), edhe nëse mësuesja ka zgjedhur një nivel bazë.
+
+### 4. Figura (AI Images)
+
+Nëse vizualizimet janë të ndezura (ose grupi është vizual), AI Images gjeneron ilustrim edukativ për fëmijë — i thjeshtë, pa tekst të panevojshëm në figurë. Figura ruhet me materialin dhe shfaqet te leximi / kuizi.
+
+### 5. Ruajtja dhe shpërndarja
+
+Çdo version i adaptuar ruhet si material i veçantë me etiketë (p.sh. `Fotosinteza (Vizual · Bazik)`), i lidhur me nxënësit e atij grupi.
+
+Kur mësuesja **publikon**, detyrat krijohen **vetëm për nxënësit e synuar** të atij versioni — jo material i njëjtë për krejt klasën nëse keni variante.
+
+### 6. AI gjatë leximit (pas publikimit)
+
+Ndërsa nxënësi lexon:
+- **Fjalori** — fjalët e vështira hapen me përkufizim (nga adaptimi)
+- **Shpjego fjali** — nxënësi zgjedh tekst → AI shpjegon thjeshtë / jep shembull / ideja kryesore / përkthen
+- **TTS** — teksti lexohet me zë (shqip ose anglisht), me volum dhe shpejtësi
+- **Figurë** — shfaqet automatikisht për vizualë ose kërkohet me buton
+
+### 7. AI në kuiz
+
+- Hint dhe feedback nga adaptimi fillestar
+- Te përgjigjja e gabuar: AI jep shpjegim + shembull (zëri nuk niset automatikisht; nxënësi shtyp **Dëgjo** nëse do)
+- Mund të gjenerohen pyetje më të lehta praktikuese midis kuizit
+- Për nxënës vizualë: figura ndihmëse për pyetjen / shpjegimin
+
+### 8. AI pas kuizit — “mësimi që mëson”
+
+Pas përfundimit, AI analizojnë sesionin (pa etiketuar fëmijën me diagnoza) dhe prodhon:
+- mesazh mbështetës për nxënësin
+- plan studimi të shkurtër
+- përditësim të **profilit mësimor** (forca, nevoja, formate të preferuara)
+- **Memory Booster**: përmbledhje e shkurtër, flashcards, pyetje ripërsëritjeje, orar 1 / 3 / 7 ditë
+
+Ky profil përdoret në adaptimet e ardhshme → cikli mbyllet: **sa më shumë përdoret, aq më i personalizuar bëhet materiali**.
+
+### 9. Parimet pedagogjike që ndjek AI
+
+- Gjuha e thjeshtë, e ngrohtë, e përshtatshme për moshën shkollore
+- I njëjti koncept shkencor — jo përmbajtje e gabuar “e lehtësuar”
+- Jo diagnoza mjekësore / etiketim klinik
+- Mësuesja gjithmonë mund të editojë dhe të refuzojë draftin e AI
+
+### Skema e shkurtër e rrjedhës
+
+```
+Tekst origjinal
+    ↓
+Zgjedhje nxënësish + preferenca
+    ↓
+Grupim sipas nevojave (Vizual / Bazik / Avancuar / …)
+    ↓
+AI adaptim për çdo grup  →  tekst + fjalor + kuiz + (EN) + (figura)
+    ↓
+Mësuesja rishikon & publikon
+    ↓
+Nxënësi lexon / dëgjon / bën kuiz
+    ↓
+AI profil + Memory Booster
+    ↓
+(hints për adaptimin e radhës)
+```
+
+---
+
+## Si të provohet (demo)
+
+1. Hyr si mësuese: `mesuesi@mesolehte.com` / `demo123`
+2. **Krijo material** → ngjit tekst → zgjidh klasën / nxënësit  
+3. Lë të ndezur **“Adapto sipas nevojave të secilit”** → **Adapto me AI**  
+4. Te **Materialet** do të shohësh versionet (etiketa: Vizual, Bazik, Avancuar…)  
+5. Hap review → **Mirato** → **Publiko**  
+6. Dil dhe hyr si nxënës: `nxenesi@mesolehte.com` / `demo123`  
+7. Hap detyrën → lexo / dëgjo → kuiz → rezultate  
+
+Të dhënat ruhen në `localStorage` të browser-it (nuk ka databazë ende) — mësuesja dhe nxënësi duhet të jenë në **të njëjtin browser**.
+
+---
+
+## Si ta nisësh lokalisht
+
+Duhet Node.js 18+ dhe një çelës OpenAI.
+
+```bash
+git clone https://github.com/LedionRrahimi1/UnicefProject.git
+cd UnicefProject
+npm install
+cp .env.example .env
+```
+
+Në `.env`:
+
+```
+VITE_OPENAI_API_KEY=sk-proj-...
+```
+
+```bash
+npm run dev
+```
+
+Hape http://localhost:5173  
+
+**Kujdes:** `.env` nuk shkon në GitHub. Mos e commit-o çelësin.
+
+---
+
+## Stack
+
+- React, TypeScript, Vite, Tailwind CSS  
+- React Router, Radix UI, Recharts, Lucide  
+- OpenAI: chat (`gpt-5.6-sol`), TTS (`gpt-4o-mini-tts`), Images (`gpt-image-1`)  
+- Ruajtje lokale: `localStorage` (`localDb.ts`)
+
+---
+
+## Kufizimet 
+
+- Pa backend / databazë: demo në të njëjtin browser  
+- Çelësi OpenAI është në frontend për demo — në prodhim duhet server  
+- Ngarkimi i PDF/Word si tekst i plotë është i kufizuar (më së miri ngjitja e tekstit)
+
+---
+
+## Struktura e shkurtër
+
+```
+src/app/
+  MaterialCreate.tsx      → krijimi + adaptimi personal
+  adaptationCohorts.ts    → grupimi sipas nevojave
+  MaterialReview.tsx      → rishikimi + publikimi
+  ReadingWorkspace.tsx    → leximi + TTS + figura
+  Quiz.tsx / Results.tsx  → kuiz + Memory Booster
+  openai.ts               → adaptim, TTS, figura
+  openaiLearning.ts       → profil + raporte pas kuizit
+  services.ts / localDb.ts
+```
+
+---
+
+## License
+
+Projekt për hackathon / UNICEF.  
+Demo edukativ — MësoLehtë AI.
+
+---
+---

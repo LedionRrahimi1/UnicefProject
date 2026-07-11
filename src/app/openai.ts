@@ -178,12 +178,14 @@ Kthe JSON me këto fusha:
 
   return {
     simplifiedText: parsed.simplifiedText?.trim() || opts.text,
-    summary: parsed.summary?.trim() || "",
-    keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints.filter(Boolean) : [],
-    vocabulary,
-    quiz,
-    teacherNotes: parsed.teacherNotes?.trim() || "",
-    translation: parsed.translation?.trim() || undefined,
+    summary: opts.includeSummary ? (parsed.summary?.trim() || "") : "",
+    keyPoints: opts.includeKeyPoints
+      ? (Array.isArray(parsed.keyPoints) ? parsed.keyPoints.filter(Boolean) : [])
+      : [],
+    vocabulary: opts.includeVocab ? vocabulary : [],
+    quiz: opts.includeQuiz ? quiz : [],
+    teacherNotes: opts.includeTeacherNotes ? (parsed.teacherNotes?.trim() || "") : "",
+    translation: opts.includeTranslation ? (parsed.translation?.trim() || undefined) : undefined,
     visualPrompts: opts.includeVisualizations ? visualPrompts : [],
   };
 }

@@ -113,13 +113,34 @@ export default function TeacherAnalytics() {
         {/* Error types */}
         <div className="bg-card rounded-2xl border border-border p-5">
           <h2 className="font-semibold mb-4">{t("ta.errorTypes")}</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <PieChart>
-              <Pie data={errorTypes} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name, value }) => `${value}%`} labelLine={false}>
+          <ResponsiveContainer width="100%" height={240}>
+            <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+              <Pie
+                data={errorTypes}
+                cx="50%"
+                cy="45%"
+                outerRadius={72}
+                dataKey="value"
+                label={false}
+              >
                 {errorTypes.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
               </Pie>
-              <Legend formatter={(v) => <span className="text-xs">{v}</span>} />
-              <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
+              <Legend
+                verticalAlign="bottom"
+                height={48}
+                formatter={(name, entry) => {
+                  const value = (entry.payload as { value?: number })?.value;
+                  return (
+                    <span className="text-xs text-foreground">
+                      {name}{typeof value === "number" ? ` · ${value}%` : ""}
+                    </span>
+                  );
+                }}
+              />
+              <Tooltip
+                formatter={(value: number | string) => [`${value}%`, t("ta.errorTypes")]}
+                contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
+              />
             </PieChart>
           </ResponsiveContainer>
         </div>

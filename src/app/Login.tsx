@@ -5,6 +5,7 @@ import { useApp } from "./store";
 import { authService } from "./services";
 import { toast } from "sonner";
 import { useT } from "./useT";
+import { AppLogo } from "./AppLogo";
 
 export default function Login() {
   const { login } = useApp();
@@ -41,9 +42,7 @@ export default function Login() {
         <div className="absolute -bottom-20 -right-20 w-80 h-80 rounded-full bg-white/5 pointer-events-none" />
         <div className="relative z-10 flex flex-col h-full">
           <Link to="/" className="flex items-center gap-3 mb-14">
-            <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center">
-              <span className="text-white font-extrabold text-xl">M</span>
-            </div>
+            <AppLogo size={44} />
             <span className="font-extrabold text-xl tracking-tight">MësoLehtë AI</span>
           </Link>
 
@@ -94,9 +93,7 @@ export default function Login() {
       <div className="flex flex-col items-center justify-center p-6 sm:p-10 bg-background">
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex items-center gap-2.5 mb-8">
-            <div className="w-9 h-9 rounded-2xl bg-primary flex items-center justify-center">
-              <span className="text-white font-extrabold text-sm">M</span>
-            </div>
+            <AppLogo size={36} />
             <span className="font-extrabold">MësoLehtë AI</span>
           </div>
 

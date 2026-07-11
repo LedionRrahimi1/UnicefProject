@@ -103,6 +103,8 @@ export const materialService = {
       adaptationGroupId: data.adaptationGroupId,
       adaptationKey: data.adaptationKey,
       adaptationLabel: data.adaptationLabel,
+      audioEnabled: data.audioEnabled,
+      enabledSections: data.enabledSections,
     };
     setMaterials([mat, ...getMaterials()]);
     return mat;

@@ -63,6 +63,21 @@ export interface Material {
   adaptationKey?: string;
   /** Label shown to the teacher (e.g. "Vizual · Bazik"). */
   adaptationLabel?: string;
+  /**
+   * When false, reading/quiz TTS controls are hidden.
+   * Undefined = legacy materials → treat as enabled.
+   */
+  audioEnabled?: boolean;
+  /** Which generation options the teacher enabled. Used to hide sections even when empty. */
+  enabledSections?: {
+    summary?: boolean;
+    keyPoints?: boolean;
+    vocab?: boolean;
+    quiz?: boolean;
+    translate?: boolean;
+    teacherNotes?: boolean;
+    visualizations?: boolean;
+  };
 }
 
 export interface Student {

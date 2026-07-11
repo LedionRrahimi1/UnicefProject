@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router";
 import { BookOpen, Sparkles, ArrowRight, Upload, Wand2, Eye, Share2, Check, Shield, Users, Zap, Brain, Headphones } from "lucide-react";
 import { useT } from "./useT";
+import { AppLogo } from "./AppLogo";
 
 const features = [
   { icon: Wand2, title: "Thjeshtësim me AI", desc: "Tekstet adaptohen automatikisht sipas nivelit të leximit të çdo nxënësi." },
@@ -28,9 +29,7 @@ export default function Landing() {
       <nav className="sticky top-0 z-40 bg-card/95 backdrop-blur border-b border-border">
         <div className="max-w-6xl mx-auto px-5 h-16 flex items-center gap-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center">
-              <span className="text-white font-bold text-sm">M</span>
-            </div>
+            <AppLogo size={32} className="rounded-xl" />
             <span className="font-bold text-foreground">MësoLehtë AI</span>
           </div>
           <div className="ml-auto flex items-center gap-3">

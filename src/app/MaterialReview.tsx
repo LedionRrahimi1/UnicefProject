@@ -8,9 +8,10 @@ import {
 import * as Tabs from "@radix-ui/react-tabs";
 import * as Dialog from "@radix-ui/react-dialog";
 import { materialService, aiService } from "./services";
-import type { Material } from "./types";
+import type { Material, QuizQuestion } from "./types";
 import { toast } from "sonner";
 import { useT } from "./useT";
+import MaterialQuizEditor from "./MaterialQuizEditor";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -41,6 +42,7 @@ export default function MaterialReview() {
   const [regenOpen, setRegenOpen] = useState(false);
   const [customInstruction, setCustomInstruction] = useState("");
   const [editedText, setEditedText] = useState("");
+  const [editedQuiz, setEditedQuiz] = useState<QuizQuestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [originalOpen, setOriginalOpen] = useState(false);
   const [enAudioLoading, setEnAudioLoading] = useState(false);
@@ -62,6 +64,7 @@ export default function MaterialReview() {
     materialService.getById(id).then(m => {
       setMaterial(m ?? null);
       setEditedText(m?.simplifiedText ?? "");
+      setEditedQuiz(m?.quiz ? m.quiz.map(q => ({ ...q, options: q.options ? [...q.options] : [] })) : []);
       setLoading(false);
     });
   }, [id]);
@@ -150,20 +153,75 @@ export default function MaterialReview() {
     [material]
   );
 
+  const quizDirty = useMemo(
+    () => JSON.stringify(editedQuiz) !== JSON.stringify(material?.quiz ?? []),
+    [editedQuiz, material?.quiz]
+  );
+
+  const persistEdits = async () => {
+    if (!material) return material;
+    const patch: Partial<Material> = {};
+    if (editedText !== material.simplifiedText) patch.simplifiedText = editedText;
+    if (quizDirty) patch.quiz = editedQuiz;
+    if (Object.keys(patch).length === 0) return material;
+    const updated = await materialService.update(material.id, patch);
+    const next = updated ?? { ...material, ...patch };
+    setMaterial(next);
+    return next;
+  };
+
   const handleStatusChange = async (status: Material["status"]) => {
     if (!material) return;
-    if (editedText !== material.simplifiedText) {
-      await materialService.update(material.id, { simplifiedText: editedText });
-    }
+    await persistEdits();
     await materialService.updateStatus(material.id, status);
     const updated = await materialService.getById(material.id);
-    setMaterial(updated ?? { ...material, status, simplifiedText: editedText });
+    setMaterial(updated ?? { ...material, status, simplifiedText: editedText, quiz: editedQuiz });
     if (status === "published") {
       toast.success(t("mr.published"));
+    } else if (status === "draft") {
+      toast.success(t("mr.saved"));
     } else {
       toast.success(`${t("common.status")}: ${statusLabels[status]}`);
     }
   };
+
+  const tabs = useMemo(() => {
+    if (!material) return [{ id: "simplified", icon: FileText, label: t("mr.simplified") }];
+    const es = material.enabledSections;
+    const show = (key: keyof NonNullable<Material["enabledSections"]>, hasContent: boolean) =>
+      es ? Boolean(es[key]) : hasContent;
+
+    return [
+      { id: "simplified", icon: FileText, label: t("mr.simplified") },
+      ...(show("summary", Boolean(material.summary?.trim()))
+        ? [{ id: "summary", icon: BookMarked, label: t("mr.summary") }]
+        : []),
+      ...(show("keyPoints", (material.keyPoints?.length ?? 0) > 0)
+        ? [{ id: "keypoints", icon: List, label: t("mr.keyPoints") }]
+        : []),
+      ...(show("vocab", (material.vocabulary?.length ?? 0) > 0)
+        ? [{ id: "vocab", icon: BookOpen, label: t("mr.vocab") }]
+        : []),
+      ...(show("quiz", (editedQuiz.length > 0) || (material.quiz?.length ?? 0) > 0)
+        ? [{ id: "quiz", icon: MessageSquare, label: t("mr.quiz") }]
+        : []),
+      ...(show("translate", Boolean(material.englishText?.trim()))
+        ? [{ id: "english", icon: Languages, label: t("mr.english") }]
+        : []),
+      ...(show("visualizations", (material.illustrations?.length ?? 0) > 0)
+        ? [{ id: "visuals", icon: ImageIcon, label: t("mr.visuals") }]
+        : []),
+      ...(show("teacherNotes", Boolean(material.teacherNotes?.trim()))
+        ? [{ id: "teacher", icon: AlertTriangle, label: t("mr.notes") }]
+        : []),
+    ];
+  }, [material, editedQuiz.length, t]);
+
+  useEffect(() => {
+    if (!tabs.some(tab => tab.id === activeTab)) {
+      setActiveTab("simplified");
+    }
+  }, [activeTab, tabs]);
 
   if (loading) return (
     <div className="flex items-center justify-center h-60">
@@ -180,23 +238,12 @@ export default function MaterialReview() {
     </div>
   );
 
-  const tabs = [
-    { id: "simplified", icon: FileText, label: t("mr.simplified") },
-    { id: "summary", icon: BookMarked, label: t("mr.summary") },
-    { id: "keypoints", icon: List, label: t("mr.keyPoints") },
-    { id: "vocab", icon: BookOpen, label: t("mr.vocab") },
-    { id: "quiz", icon: MessageSquare, label: t("mr.quiz") },
-    { id: "english", icon: Languages, label: t("mr.english") },
-    { id: "visuals", icon: ImageIcon, label: t("mr.visuals") },
-    { id: "teacher", icon: AlertTriangle, label: t("mr.notes") },
-  ];
-
   return (
     <div className="max-w-7xl space-y-5">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <button onClick={() => navigate("/teacher/materials")} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-2">
-            <ChevronLeft size={14} /> {t("tm.title")}
+            <ChevronLeft size={14} /> {t("common.back")}
           </button>
           <h1 className="text-2xl font-bold">{material.title}</h1>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
@@ -323,23 +370,11 @@ export default function MaterialReview() {
               </div>
             </Tabs.Content>
             <Tabs.Content value="quiz">
-              <div className="grid sm:grid-cols-2 gap-3">
-                {material.quiz.map((q, i) => (
-                  <div key={q.id} className="border border-border rounded-xl p-4">
-                    <p className="text-xs text-muted-foreground mb-1">Pyetja {i + 1}</p>
-                    <p className="text-sm font-medium">{q.question}</p>
-                    {q.options && q.options.length > 0 && (
-                      <div className="mt-2 space-y-1">
-                        {q.options.map((opt, oi) => (
-                          <div key={oi} className={`text-xs px-3 py-1.5 rounded-lg ${oi === q.correct ? "bg-success-muted text-success-muted-foreground" : "bg-muted text-muted-foreground"}`}>
-                            {oi === q.correct && <Check size={10} className="inline mr-1" />} {opt}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <MaterialQuizEditor
+                quiz={editedQuiz}
+                onChange={setEditedQuiz}
+                readOnly={material.status === "published"}
+              />
             </Tabs.Content>
             <Tabs.Content value="english">
               {!material.englishText?.trim() ? (

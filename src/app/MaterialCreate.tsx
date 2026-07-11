@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   Upload, ChevronRight, ChevronLeft, Check, Wand2,
   X, File,
@@ -10,6 +11,13 @@ import { MOCK_CLASSES } from "./mockData";
 import { buildAdaptationCohorts } from "./adaptationCohorts";
 import type { Student } from "./types";
 import { useT } from "./useT";
+
+class AiAbortedError extends Error {
+  constructor() {
+    super("AI_ABORTED");
+    this.name = "AiAbortedError";
+  }
+}
 
 const AI_STEPS_BASE = [
   "Duke analizuar materialin...",
@@ -27,7 +35,10 @@ export default function MaterialCreate() {
   const [processing, setProcessing] = useState(false);
   const [aiStepIdx, setAiStepIdx] = useState(-1);
   const [variantProgress, setVariantProgress] = useState("");
+  const [abortConfirmOpen, setAbortConfirmOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef(false);
+  const progressTimerRef = useRef<number | null>(null);
 
   // Step 1
   const [text, setText] = useState("");
@@ -58,7 +69,14 @@ export default function MaterialCreate() {
     visualizations: true,
   });
 
-  const STEPS = [t("mc.stepUpload"), t("mc.stepAudience"), t("mc.stepAdapt"), t("mc.stepConfirm")];
+  const STEPS = [
+    t("mc.stepUpload"),
+    t("mc.stepAudience"),
+    t("mc.stepAdapt"),
+    t("mc.stepConfirm"),
+    t("mc.stepProcessing"),
+  ];
+  const activeStep = processing ? 4 : step;
   const AI_STEPS = [...AI_STEPS_BASE, t("mc.aiReady")];
   const simplificationLabels = [t("mc.easy"), t("mc.medAdapt"), t("mc.advAdapt")];
   const lengthOptions = [
@@ -147,6 +165,42 @@ export default function MaterialCreate() {
     setStep(s => s + 1);
   };
 
+  const clearProgressTimer = () => {
+    if (progressTimerRef.current != null) {
+      window.clearInterval(progressTimerRef.current);
+      progressTimerRef.current = null;
+    }
+  };
+
+  const throwIfAborted = () => {
+    if (abortRef.current) throw new AiAbortedError();
+  };
+
+  const stopProcessingKeepForm = () => {
+    clearProgressTimer();
+    setProcessing(false);
+    setAiStepIdx(-1);
+    setVariantProgress("");
+  };
+
+  const handleBack = () => {
+    if (processing) {
+      setAbortConfirmOpen(true);
+      return;
+    }
+    if (step === 0) {
+      navigate("/teacher/materials");
+      return;
+    }
+    setStep(s => s - 1);
+  };
+
+  const confirmAbortBack = () => {
+    abortRef.current = true;
+    setAbortConfirmOpen(false);
+    stopProcessingKeepForm();
+  };
+
   const createOneVariant = async (opts: {
     sourceText: string;
     finalTitle: string;
@@ -218,31 +272,43 @@ export default function MaterialCreate() {
       class: opts.className,
       originalText: opts.sourceText,
       simplifiedText: adapted.simplifiedText,
-      summary: adapted.summary,
-      keyPoints: adapted.keyPoints,
-      vocabulary: adapted.vocabulary,
-      quiz: adapted.quiz,
-      teacherNotes: adapted.teacherNotes,
-      englishText,
-      illustrations,
+      summary: switches.summary ? adapted.summary : "",
+      keyPoints: switches.keyPoints ? adapted.keyPoints : [],
+      vocabulary: switches.vocab ? adapted.vocabulary : [],
+      quiz: switches.quiz ? adapted.quiz : [],
+      teacherNotes: switches.teacherNotes ? adapted.teacherNotes : "",
+      englishText: switches.translate ? englishText : "",
+      illustrations: opts.includeVisuals ? illustrations : [],
       estimatedMinutes: Math.max(10, Math.round(adapted.simplifiedText.split(/\s+/).length / 120) * 5),
       targetStudentIds: opts.targetIds,
       adaptationGroupId: opts.adaptationGroupId,
       adaptationKey: opts.adaptationKey,
       adaptationLabel: opts.adaptationLabel,
+      audioEnabled: switches.audio,
+      enabledSections: {
+        summary: switches.summary,
+        keyPoints: switches.keyPoints,
+        vocab: switches.vocab,
+        quiz: switches.quiz,
+        translate: switches.translate,
+        teacherNotes: switches.teacherNotes,
+        visualizations: switches.visualizations && opts.includeVisuals,
+      },
     });
 
-    try {
-      await aiService.generateFlashcards({
-        id: mat.id,
-        title: mat.title,
-        subject: mat.subject,
-        simplifiedText: mat.simplifiedText,
-        keyPoints: mat.keyPoints,
-        vocabulary: mat.vocabulary,
-      });
-    } catch {
-      // optional
+    if (switches.vocab || switches.keyPoints) {
+      try {
+        await aiService.generateFlashcards({
+          id: mat.id,
+          title: mat.title,
+          subject: mat.subject,
+          simplifiedText: mat.simplifiedText,
+          keyPoints: mat.keyPoints,
+          vocabulary: mat.vocabulary,
+        });
+      } catch {
+        // optional
+      }
     }
 
     return mat;
@@ -266,11 +332,13 @@ export default function MaterialCreate() {
       return;
     }
 
+    abortRef.current = false;
     setProcessing(true);
     setAiStepIdx(0);
     setVariantProgress("");
 
-    const progressTimer = window.setInterval(() => {
+    clearProgressTimer();
+    progressTimerRef.current = window.setInterval(() => {
       setAiStepIdx(prev => (prev < AI_STEPS.length - 2 ? prev + 1 : prev));
     }, 1800);
 
@@ -282,6 +350,7 @@ export default function MaterialCreate() {
       const profilesByStudentId = new Map<string, Awaited<ReturnType<typeof learningService.getProfile>>>();
       const studentsForTargets: Student[] = [];
       for (const sid of targets) {
+        throwIfAborted();
         const [prof, stu] = await Promise.all([
           learningService.getProfile(sid),
           studentService.getById(sid),
@@ -295,6 +364,7 @@ export default function MaterialCreate() {
       if (personalizeByNeeds && studentsForTargets.length > 0) {
         const cohorts = buildAdaptationCohorts(studentsForTargets, profilesByStudentId);
         for (let i = 0; i < cohorts.length; i++) {
+          throwIfAborted();
           const cohort = cohorts[i];
           setVariantProgress(
             t("mc.variantProgress", {
@@ -307,7 +377,7 @@ export default function MaterialCreate() {
           setAiStepIdx(0);
 
           const levelForCohort = cohort.levelOverride ?? level;
-          const includeVisuals = switches.visualizations || cohort.forceVisuals;
+          const includeVisuals = switches.visualizations;
 
           const mat = await createOneVariant({
             sourceText,
@@ -322,13 +392,16 @@ export default function MaterialCreate() {
             adaptationKey: cohort.key,
             adaptationLabel: cohort.label,
           });
+          throwIfAborted();
           createdIds.push(mat.id);
         }
 
-        window.clearInterval(progressTimer);
+        clearProgressTimer();
+        throwIfAborted();
         setAiStepIdx(AI_STEPS.length - 1);
         toast.success(t("mc.successVariants", { n: String(createdIds.length) }));
         await new Promise(r => setTimeout(r, 400));
+        throwIfAborted();
         navigate(`/teacher/materials/${createdIds[0]}/review`);
       } else {
         // Single shared adaptation (legacy behaviour) — still only assign selected targets
@@ -347,6 +420,7 @@ export default function MaterialCreate() {
             .forEach(h => hintSet.add(h));
         }
 
+        throwIfAborted();
         const mat = await createOneVariant({
           sourceText,
           finalTitle,
@@ -358,16 +432,22 @@ export default function MaterialCreate() {
           targetIds: targets,
           adaptationGroupId,
         });
+        throwIfAborted();
         createdIds = [mat.id];
 
-        window.clearInterval(progressTimer);
+        clearProgressTimer();
         setAiStepIdx(AI_STEPS.length - 1);
         toast.success(t("mc.success"));
         await new Promise(r => setTimeout(r, 500));
+        throwIfAborted();
         navigate(`/teacher/materials/${mat.id}/review`);
       }
     } catch (err) {
-      window.clearInterval(progressTimer);
+      clearProgressTimer();
+      if (err instanceof AiAbortedError) {
+        stopProcessingKeepForm();
+        return;
+      }
       setProcessing(false);
       setAiStepIdx(-1);
       setVariantProgress("");
@@ -388,19 +468,19 @@ export default function MaterialCreate() {
         {STEPS.map((label, i) => (
           <React.Fragment key={label}>
             <div className="flex flex-col items-center gap-1.5">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${i < step ? "bg-primary text-primary-foreground" : i === step ? "bg-primary text-primary-foreground ring-4 ring-primary/20" : "bg-muted text-muted-foreground"}`}>
-                {i < step ? <Check size={14} /> : i + 1}
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${i < activeStep ? "bg-primary text-primary-foreground" : i === activeStep ? "bg-primary text-primary-foreground ring-4 ring-primary/20" : "bg-muted text-muted-foreground"}`}>
+                {i < activeStep ? <Check size={14} /> : i + 1}
               </div>
-              <span className={`text-xs text-center hidden sm:block ${i === step ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{label}</span>
+              <span className={`text-[10px] sm:text-xs text-center leading-tight max-w-[4.5rem] sm:max-w-none ${i === activeStep ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{label}</span>
             </div>
-            {i < STEPS.length - 1 && <div className={`flex-1 h-px mx-2 ${i < step ? "bg-primary" : "bg-border"}`} />}
+            {i < STEPS.length - 1 && <div className={`flex-1 h-px mx-1 sm:mx-2 ${i < activeStep ? "bg-primary" : "bg-border"}`} />}
           </React.Fragment>
         ))}
       </div>
 
       {/* Step content */}
       <div className="bg-card rounded-2xl border border-border p-6">
-        {step === 0 && (
+        {step === 0 && !processing && (
           <div className="space-y-4">
             <h2 className="font-semibold text-lg">{t("mc.stepUpload")}</h2>
             <div className="flex gap-2 mb-4">
@@ -445,7 +525,7 @@ export default function MaterialCreate() {
           </div>
         )}
 
-        {step === 1 && (
+        {step === 1 && !processing && (
           <div className="space-y-5">
             <h2 className="font-semibold text-lg">{t("mc.stepAudience")}</h2>
             <div className="grid grid-cols-2 gap-3">
@@ -555,7 +635,7 @@ export default function MaterialCreate() {
           </div>
         )}
 
-        {step === 2 && (
+        {step === 2 && !processing && (
           <div className="space-y-5">
             <h2 className="font-semibold text-lg">{t("mc.stepAdapt")}</h2>
             <div className="grid sm:grid-cols-2 gap-4">
@@ -676,14 +756,17 @@ export default function MaterialCreate() {
         )}
       </div>
 
-      {/* Navigation */}
-      {!processing && (
-        <div className="flex items-center justify-between">
-          <button onClick={() => step === 0 ? window.history.back() : setStep(step - 1)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border hover:bg-muted transition-colors text-sm font-medium">
-            <ChevronLeft size={16} /> {step === 0 ? t("common.cancel") : t("mc.back")}
-          </button>
-          {step < 3 ? (
+      {/* Navigation — always visible, including during AI processing */}
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={handleBack}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-border hover:bg-muted transition-colors text-sm font-medium"
+        >
+          <ChevronLeft size={16} /> {t("mc.back")}
+        </button>
+        {!processing && (
+          step < 3 ? (
             <button type="button" onClick={handleContinue} disabled={!canProceed()}
               className="flex items-center gap-2 bg-primary text-primary-foreground font-medium px-5 py-2.5 rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:pointer-events-none">
               {t("mc.continue")} <ChevronRight size={16} />
@@ -693,9 +776,38 @@ export default function MaterialCreate() {
               className="flex items-center gap-2 bg-primary text-primary-foreground font-semibold px-6 py-2.5 rounded-xl hover:bg-primary/90 transition-colors shadow-lg shadow-primary/25">
               <Wand2 size={16} /> {personalizeByNeeds ? t("mc.adaptAll") : t("mc.adaptAI")}
             </button>
-          )}
-        </div>
-      )}
+          )
+        )}
+      </div>
+
+      <Dialog.Root open={abortConfirmOpen} onOpenChange={setAbortConfirmOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50" />
+          <Dialog.Content className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-md mx-auto bg-card rounded-2xl border border-border shadow-2xl p-6 z-50">
+            <Dialog.Title className="font-semibold text-lg mb-2">{t("mc.abortTitle")}</Dialog.Title>
+            <Dialog.Description className="text-sm text-muted-foreground whitespace-pre-line mb-6">
+              {t("mc.abortBody")}
+            </Dialog.Description>
+            <div className="flex gap-3 justify-end">
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded-xl border border-border text-sm font-medium hover:bg-muted transition-colors"
+                >
+                  {t("common.cancel")}
+                </button>
+              </Dialog.Close>
+              <button
+                type="button"
+                onClick={confirmAbortBack}
+                className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                {t("mc.abortConfirm")}
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }
