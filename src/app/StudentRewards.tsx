@@ -36,18 +36,25 @@ export default function StudentRewards() {
 
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
     Promise.all([
       gamificationService.getStudentLevel(user.id),
       gamificationService.getStudentBadges(user.id),
       gamificationService.getBadgeProgress(user.id),
       gamificationService.getXPHistory(user.id),
-    ]).then(([lvl, badges, prog, history]) => {
-      setLevel(lvl);
-      setStudentBadges(badges);
-      setProgress(prog);
-      setXpHistory(history.slice(0, 10));
-    });
-  }, [user]);
+    ])
+      .then(([lvl, badges, prog, history]) => {
+        if (cancelled) return;
+        setLevel(lvl);
+        setStudentBadges(badges);
+        setProgress(prog);
+        setXpHistory(history.slice(0, 10));
+      })
+      .catch(err => {
+        console.warn("[rewards] load failed", err);
+      });
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   const earnedIds = new Set(studentBadges.map(b => b.badgeId));
   const earnedBadges = ALL_BADGES.filter(b => earnedIds.has(b.id));

@@ -12,6 +12,7 @@ import type { Material, QuizQuestion } from "./types";
 import { toast } from "sonner";
 import { useT } from "./useT";
 import MaterialQuizEditor from "./MaterialQuizEditor";
+import LessonChatbot from "./LessonChatbot";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -470,6 +471,8 @@ export default function MaterialReview() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+
+      <LessonChatbot role="teacher" material={{ ...material, simplifiedText: editedText || material.simplifiedText }} />
     </div>
   );
 }

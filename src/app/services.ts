@@ -14,8 +14,10 @@ import {
   synthesizeEnglishSpeech,
   chunkTextForTTS,
   generateEducationalIllustration,
+  lessonChatWithAI,
   type AdaptMaterialOptions,
   type AdaptedMaterial,
+  type LessonChatOptions,
 } from "./openai";
 import {
   generatePostLessonIntelligence,
@@ -41,6 +43,7 @@ import {
   sbUpsertMaterial,
   sbDeleteMaterial,
   sbGetAssignments,
+  sbGetAssignmentsForStudent,
   sbUpsertAssignments,
   sbDeleteAssignmentsForMaterial,
   sbGetAssignmentById,
@@ -126,7 +129,12 @@ export const authService = {
     if (!isSupabaseEnabled()) {
       throw new Error("Bashkimi me klasën kërkon Supabase.");
     }
-    const { user } = await sbJoinClassWithCode(userId, joinCode);
+    const { user, student } = await sbJoinClassWithCode(userId, joinCode);
+    try {
+      await ensurePublishedAssignmentsForStudent(student);
+    } catch (err) {
+      console.warn("[joinClass] assignment backfill failed", err);
+    }
     return user;
   },
 
@@ -184,6 +192,42 @@ async function publishMaterialCloud(material: Material): Promise<number> {
     studentCount: students.length,
   };
   await sbUpsertMaterial(published);
+  if (created.length > 0) await sbUpsertAssignments(created);
+  return created.length;
+}
+
+/** Create missing assignments for published class materials (join-after-publish / reload heal). */
+async function ensurePublishedAssignmentsForStudent(student: {
+  id: string;
+  class: string;
+}): Promise<number> {
+  const materials = await sbGetMaterials();
+  const existing = await sbGetAssignmentsForStudent(student.id);
+  const have = new Set(existing.map(a => a.materialId));
+  const classNorm = normalizeClassName(student.class);
+  const today = new Date().toISOString().split("T")[0];
+  const deadline = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const created: Assignment[] = [];
+
+  for (const m of materials) {
+    if (m.status !== "published") continue;
+    if (normalizeClassName(m.class) !== classNorm) continue;
+    if (m.targetStudentIds?.length && !m.targetStudentIds.includes(student.id)) continue;
+    if (have.has(m.id)) continue;
+    created.push({
+      id: `asgn-${m.id}-${student.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      materialId: m.id,
+      studentId: student.id,
+      deadline,
+      startDate: today,
+      allowRetry: true,
+      showAnswers: true,
+      enableAudio: m.audioEnabled !== false,
+      status: "pending",
+      attempts: 0,
+    });
+  }
+
   if (created.length > 0) await sbUpsertAssignments(created);
   return created.length;
 }
@@ -433,14 +477,19 @@ export const assignmentService = {
   async getForStudent(studentId: string): Promise<Assignment[]> {
     await delay(150);
     if (isSupabaseEnabled()) {
-      const all = await sbGetAssignments();
-      return all
-        .filter(a => a.studentId === studentId)
-        .sort((a, b) => b.startDate.localeCompare(a.startDate));
+      return sbGetAssignmentsForStudent(studentId);
     }
     return getAssignments()
       .filter(a => a.studentId === studentId)
       .sort((a, b) => b.startDate.localeCompare(a.startDate));
+  },
+
+  /** Heal missing assignments for published materials in the student's class. */
+  async syncPublishedForStudent(studentId: string): Promise<number> {
+    if (!isSupabaseEnabled()) return 0;
+    const student = await sbGetStudentById(studentId);
+    if (!student) return 0;
+    return ensurePublishedAssignmentsForStudent(student);
   },
   async getById(id: string): Promise<Assignment | undefined> {
     await delay(100);
@@ -600,6 +649,10 @@ export const aiService = {
 
   async explainSentence(sentence: string, action?: string): Promise<string> {
     return explainSentenceWithAI(sentence, action);
+  },
+
+  async lessonChat(opts: LessonChatOptions): Promise<string> {
+    return lessonChatWithAI(opts);
   },
 
   async translateText(text: string, lang: string): Promise<string> {

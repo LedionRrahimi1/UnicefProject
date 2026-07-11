@@ -1,13 +1,14 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import type { User, AccessibilitySettings } from "./types";
 import { authService } from "./services";
-import { isSupabaseEnabled } from "./supabase";
+import { getSupabase, isSupabaseEnabled } from "./supabase";
+import { enrichUserFromRoster, sbGetProfile } from "./supabaseDb";
 
 interface AppState {
   user: User | null;
   authReady: boolean;
   login: (user: User) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   accessibility: AccessibilitySettings;
   setAccessibility: (s: Partial<AccessibilitySettings>) => void;
   accessibilityOpen: boolean;
@@ -29,7 +30,7 @@ const AppContext = createContext<AppState>({
   user: null,
   authReady: true,
   login: () => {},
-  logout: () => {},
+  logout: async () => {},
   accessibility: defaults,
   setAccessibility: () => {},
   accessibilityOpen: false,
@@ -41,6 +42,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try { return JSON.parse(localStorage.getItem("mesolehte_user") ?? "null"); } catch { return null; }
   });
   const [authReady, setAuthReady] = useState(!isSupabaseEnabled());
+  /** Bumped on login so a late signOut cannot wipe a fresh session in the UI. */
+  const authEpoch = useRef(0);
 
   const [accessibility, setAccessibilityState] = useState<AccessibilitySettings>(() => {
     try {
@@ -57,34 +60,82 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [accessibilityOpen, setAccessibilityOpen] = useState(false);
 
-  const login = useCallback((u: User) => {
+  const applyUser = useCallback((u: User | null) => {
     setUser(u);
-    localStorage.setItem("mesolehte_user", JSON.stringify(u));
+    if (u) localStorage.setItem("mesolehte_user", JSON.stringify(u));
+    else localStorage.removeItem("mesolehte_user");
   }, []);
 
-  const logout = useCallback(() => {
-    setUser(null);
-    localStorage.removeItem("mesolehte_user");
-    void authService.logout();
-  }, []);
+  const login = useCallback((u: User) => {
+    authEpoch.current += 1;
+    applyUser(u);
+  }, [applyUser]);
+
+  const logout = useCallback(async () => {
+    const epoch = ++authEpoch.current;
+    applyUser(null);
+    if (!isSupabaseEnabled()) return;
+    try {
+      await authService.logout();
+    } catch {
+      /* ignore */
+    }
+    // A login that started after this logout began owns the epoch now
+    if (epoch !== authEpoch.current) return;
+  }, [applyUser]);
 
   useEffect(() => {
     if (!isSupabaseEnabled()) {
       setAuthReady(true);
       return;
     }
+
     let cancelled = false;
+    const sb = getSupabase();
+
     (async () => {
-      const sessionUser = await authService.getSessionUser();
+      try {
+        const sessionUser = await authService.getSessionUser();
+        if (cancelled) return;
+        if (sessionUser) applyUser(sessionUser);
+        else applyUser(null);
+      } catch {
+        if (!cancelled) applyUser(null);
+      } finally {
+        if (!cancelled) setAuthReady(true);
+      }
+    })();
+
+    const { data: sub } = sb.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return;
-      if (sessionUser) {
-        setUser(sessionUser);
-        localStorage.setItem("mesolehte_user", JSON.stringify(sessionUser));
+
+      if (event === "SIGNED_OUT") {
+        const { data } = await sb.auth.getSession();
+        if (cancelled) return;
+        // Only clear UI if there is truly no session (avoids stale late signOut after re-login)
+        if (!data.session) applyUser(null);
+        setAuthReady(true);
+        return;
+      }
+
+      if (!session?.user) return;
+      try {
+        let profile = await sbGetProfile(session.user.id);
+        if (!profile || cancelled) return;
+        profile = await enrichUserFromRoster(profile);
+        if (cancelled) return;
+        applyUser(profile);
+      } catch {
+        /* keep current */
       }
       setAuthReady(true);
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    });
+
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, [applyUser]);
 
   const setAccessibility = useCallback((s: Partial<AccessibilitySettings>) => {
     setAccessibilityState(prev => {

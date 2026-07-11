@@ -32,7 +32,10 @@ export default function TeacherLayout() {
     { to: "/teacher/settings", icon: Settings, labelKey: "nav.settings" },
   ];
 
-  const handleLogout = () => { logout(); navigate("/"); };
+  const handleLogout = async () => {
+    await logout();
+    navigate("/");
+  };
 
   useEffect(() => {
     setHeaderHidden(false);

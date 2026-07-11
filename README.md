@@ -30,6 +30,7 @@ We do not compare children against each other. Instead of “XP” and “badges
 - Simplification levels, text length, number of quiz questions
 - Generation options: summary, key points, vocabulary, quiz, EN translation, visualizations, teacher notes
 - Full review before publishing (edit, approve, publish)
+- **AI lesson chatbot** while reviewing a material (floating robot button → chat window)
 - Class management and student preferences (visual, audio, reading level)
 - Class analytics (completion, scores, who needs support)
 - Manual rewards: Stars and Titles from the teacher
@@ -38,6 +39,7 @@ We do not compare children against each other. Instead of “XP” and “badges
 - Assignments dashboard (pending / in progress / completed)
 - Reading workspace with vocabulary, focus mode, font size and spacing
 - AI explanation for a selected sentence
+- **AI lesson chatbot** during reading (asks about the current lesson; off-topic questions are declined) — not shown on the quiz page
 - **Listen** with real speech (Albanian and English TTS)
 - AI figures / illustrations (especially for visual learners)
 - SQ / EN reading when a translation exists
@@ -48,7 +50,7 @@ We do not compare children against each other. Instead of “XP” and “badges
 
 ### Accessibility & language
 - Accessibility panel (Lexend / Atkinson fonts, contrast, dark mode, motion)
-- Bilingual UI: **Albanian / English**
+- Bilingual UI: **Albanian / English** (including the AI chatbot labels and replies)
 - Calm, classroom-friendly design
 
 ---
@@ -132,6 +134,19 @@ While the student reads:
 - **Explain sentence** — student selects text → AI explains simply / gives an example / main idea / translates
 - **TTS** — text is read aloud (Albanian or English), with volume and speed
 - **Figure** — shown automatically for visual learners or on demand
+
+### 6b. AI lesson chatbot (teacher review + student reading)
+
+A floating **robot** button opens a chat window scoped to the current material.
+
+| Who | Where | What it does |
+|-----|--------|----------------|
+| **Teacher** | Material review | Asks about clarity, vocabulary, quiz ideas, improvements for **this** material |
+| **Student** | Reading workspace | Asks about the **current lesson** (and briefly prior lessons); refuses off-topic questions; does not hand over ready-made quiz answers |
+
+- UI and chatbot copy are available in **Albanian and English** (follows the app language setting).
+- Same chat thread for the open material; not shown on the quiz page.
+- Uses the material text, summary, key points, and vocabulary as context for OpenAI chat.
 
 ### 7. AI in the quiz
 
@@ -304,6 +319,7 @@ Ne nuk krahasojmë fëmijët me njëri-tjetrin. Në vend të “XP” dhe “bad
 - Nivele thjeshtësimi, gjatësi teksti, numër pyetjesh
 - Elementet e gjenerimit: përmbledhje, pika kryesore, fjalor, kuiz, përkthim EN, vizualizime, shënime për mësuesen
 - Review i plotë para publikimit (editim, miratim, publikim)
+- **Chatbot AI i mësimit** gjatë shqyrtimit të materialit (buton roboti → dritare bisede)
 - Menaxhim klasash dhe preferenca nxënësish (vizual, audio, nivel leximi)
 - Analytics për klasën (përfundim, rezultate, kush ka nevojë për mbështetje)
 - Shpërblime manuale: Yje dhe Tituj nga mësuesja
@@ -312,6 +328,7 @@ Ne nuk krahasojmë fëmijët me njëri-tjetrin. Në vend të “XP” dhe “bad
 - Panel detyrash (në pritje / në vazhdim / të përfunduara)
 - Hapësirë leximi me fjalor, focus mode, madhësi dhe hapësirë teksti
 - Shpjegim i fjalisë së zgjedhur me AI
+- **Chatbot AI i mësimit** gjatë leximit (pyet për mësimin aktual; tema jashtë mësimit refuzohen) — nuk shfaqet te faqja e kuizit
 - **Dëgjo** me zë real (TTS shqip dhe anglisht)
 - Figura / ilustrime AI (veçanërisht për nxënës vizualë)
 - Lexim SQ / EN kur materiali ka përkthim
@@ -322,7 +339,7 @@ Ne nuk krahasojmë fëmijët me njëri-tjetrin. Në vend të “XP” dhe “bad
 
 ### Aksesueshmëri & gjuhë
 - Panel aksesueshmërie (font Lexend / Atkinson, kontrast, dark mode, motion)
-- UI dygjuhësh: **Shqip / English**
+- UI dygjuhësh: **Shqip / English** (përfshi etiketat dhe përgjigjet e chatbot-it AI)
 - Dizajn i qetë, i lexueshëm për klasë
 
 ---
@@ -406,6 +423,19 @@ Ndërsa nxënësi lexon:
 - **Shpjego fjali** — nxënësi zgjedh tekst → AI shpjegon thjeshtë / jep shembull / ideja kryesore / përkthen
 - **TTS** — teksti lexohet me zë (shqip ose anglisht), me volum dhe shpejtësi
 - **Figurë** — shfaqet automatikisht për vizualë ose kërkohet me buton
+
+### 6b. Chatbot AI i mësimit (review i mësueses + leximi i nxënësit)
+
+Butoni floating me ikonë **roboti** hap dritaren e bisedës, të kufizuar te materiali aktual.
+
+| Kush | Ku | Çfarë bën |
+|------|-----|-----------|
+| **Mësuesja** | Shqyrtimi i materialit | Pyet për qartësi, fjalor, ide kuizi, përmirësime për **këtë** material |
+| **Nxënësi** | Hapësira e leximit | Pyet për **mësimin aktual** (dhe shkurt mësimet e mëparshme); refuzon tema jashtë mësimit; nuk jep përgjigje të gatshme të kuizit |
+
+- UI dhe teksti i chatbot-it janë në **shqip dhe anglisht** (ndjek gjuhën e aplikacionit).
+- E njëjta bisedë për materialin e hapur; nuk shfaqet te faqja e kuizit.
+- Përdor si kontekst tekstin e materialit, përmbledhjen, pikat kryesore dhe fjalorin (OpenAI chat).
 
 ### 7. AI në kuiz
 

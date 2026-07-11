@@ -460,3 +460,148 @@ export async function generateEducationalIllustration(prompt: string): Promise<s
   return compressIllustrationDataUrl(raw);
 }
 
+export type LessonChatRole = "teacher" | "student";
+
+export interface LessonChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface LessonChatOptions {
+  role: LessonChatRole;
+  materialTitle: string;
+  subject: string;
+  className?: string;
+  simplifiedText: string;
+  summary?: string;
+  keyPoints?: string[];
+  vocabulary?: Array<{ word: string; definition?: string }>;
+  previousLessons?: Array<{ title: string; summary?: string }>;
+  history: LessonChatMessage[];
+  userMessage: string;
+}
+
+async function chatMultiTurn(
+  system: string,
+  messages: Array<{ role: "user" | "assistant" | "system"; content: string }>
+): Promise<string> {
+  const supportsCustomTemp = !MODEL.startsWith("gpt-5.6");
+  const body: Record<string, unknown> = {
+    model: MODEL,
+    ...(supportsCustomTemp ? { temperature: 0.5 } : {}),
+    messages: [{ role: "system", content: system }, ...messages],
+  };
+
+  const res = await fetch(OPENAI_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${getApiKey()}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const msg = (err as { error?: { message?: string } })?.error?.message || res.statusText;
+    throw new Error(`OpenAI: ${msg}`);
+  }
+
+  const data = await res.json();
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content || typeof content !== "string") {
+    throw new Error("Përgjigja e AI ishte e zbrazët.");
+  }
+  return content.trim();
+}
+
+function truncate(text: string, max: number): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, max)}…`;
+}
+
+/**
+ * Lesson-scoped chatbot: answers only about the current material
+ * (and optional previous lessons for students).
+ */
+export async function lessonChatWithAI(opts: LessonChatOptions): Promise<string> {
+  const text = truncate(opts.simplifiedText || "", 9000);
+  const summary = truncate(opts.summary || "", 1200);
+  const keyPoints = (opts.keyPoints || []).slice(0, 12).join("\n- ");
+  const vocab = (opts.vocabulary || [])
+    .slice(0, 20)
+    .map(v => `${v.word}${v.definition ? `: ${v.definition}` : ""}`)
+    .join("\n- ");
+
+  const previousBlock =
+    opts.previousLessons && opts.previousLessons.length > 0
+      ? opts.previousLessons
+          .slice(0, 8)
+          .map(
+            (l, i) =>
+              `${i + 1}. ${l.title}${l.summary ? ` — ${truncate(l.summary, 220)}` : ""}`
+          )
+          .join("\n")
+      : "(nuk ka mësime të mëparshme të dhëna)";
+
+  const teacherSystem = `Ti je asistenti pedagogjik i platformës MësoLehtë AI.
+Ndiumo mësuesen/mësuesin të shqyrtojë dhe përmirësojë materialin mësimor.
+
+RREGULLA:
+- Përgjigju vetëm për këtë material (përmbajtje, nivel, qartësi, kuiz, fjalor, përmbledhje, ide për përmirësim).
+- Nëse pyetja është jashtë temës së materialit, thuaj shkurt që mund të ndihmosh vetëm për këtë mësim.
+- Jepi përgjigje praktike, të qarta, në shqip (ose anglisht nëse mësuesja shkruan anglisht).
+- Mos invento fakte që nuk mbështeten nga teksti i materialit.
+- Mos jep diagnostikime mjekësore; vetëm këshilla pedagogjike.
+
+MATERIALI:
+Titulli: ${opts.materialTitle}
+Lënda: ${opts.subject}
+Klasa: ${opts.className || "—"}
+Përmbledhje: ${summary || "—"}
+Pikat kryesore:
+- ${keyPoints || "—"}
+Fjalor:
+- ${vocab || "—"}
+Teksti i thjeshtësuar:
+${text || "(bosh)"}`;
+
+  const studentSystem = `Ti je miku mësimor i platformës MësoLehtë AI për nxënës (zakonisht 8–14 vjeç).
+Ndiumo nxënësin të kuptojë mësimin aktual.
+
+RREGULLA TË RËNDËSISHME:
+1. Përgjigju VETËM për mësimin aktual ose mësimet e mëparshme të listuara më poshtë.
+2. Nëse pyetja është jashtë temës (lojëra, politika, kodim, tema personale jo-mësimore, etj.), refuzo me dashamirësi në shqip dhe ftoje të pyesë për mësimin.
+3. Përdor shqip të thjeshtë, fjali të shkurtra, shembuj të lehtë.
+4. Mos jep përgjigjet e gatshme të kuizit — udhëzoje të mendojë me pyetje ndihmëse.
+5. Mos invento informacion që nuk është në material; nëse nuk e di nga teksti, thuaj qartë.
+6. Nëse pyet për një mësim të mëparshëm, përdor vetëm informacionin e dhënë te lista e mësimëve të mëparshme.
+
+MËSIMI AKTUAL:
+Titulli: ${opts.materialTitle}
+Lënda: ${opts.subject}
+Përmbledhje: ${summary || "—"}
+Pikat kryesore:
+- ${keyPoints || "—"}
+Fjalor:
+- ${vocab || "—"}
+Teksti:
+${text || "(bosh)"}
+
+MËSIME TË MËPARSHME (kontekst i kufizuar):
+${previousBlock}`;
+
+  const system = opts.role === "teacher" ? teacherSystem : studentSystem;
+
+  const history = opts.history.slice(-12).map(m => ({
+    role: m.role,
+    content: truncate(m.content, 2000),
+  }));
+
+  return chatMultiTurn(system, [
+    ...history,
+    { role: "user", content: truncate(opts.userMessage, 1500) },
+  ]);
+}
+

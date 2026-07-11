@@ -15,6 +15,15 @@ type RecentRewards = {
   weeklyXP: number;
 };
 
+const emptyLevel = (uid: string): StudentLevel => ({
+  studentId: uid,
+  level: 1,
+  totalXP: 0,
+  currentLevelXP: 0,
+  nextLevelXP: 100,
+  progressPercentage: 0,
+});
+
 export default function StudentDashboard() {
   const { user, login } = useApp();
   const { t } = useT();
@@ -24,33 +33,75 @@ export default function StudentDashboard() {
   const [recentRewards, setRecentRewards] = useState<RecentRewards | null>(null);
   const [loading, setLoading] = useState(true);
   const [needsClass, setNeedsClass] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState("");
 
   const loadDashboard = async (uid: string) => {
+    setLoadError("");
+    let rosterMissing = false;
+
     if (isSupabaseEnabled()) {
-      const roster = await studentService.getById(uid);
-      if (!roster) {
-        setNeedsClass(true);
-        setLoading(false);
-        return;
+      try {
+        const roster = await studentService.getById(uid);
+        rosterMissing = !roster;
+        setNeedsClass(rosterMissing);
+        if (roster) {
+          // Backfill published lessons assigned after student joined (or missed on publish)
+          try {
+            await assignmentService.syncPublishedForStudent(uid);
+          } catch {
+            /* non-fatal */
+          }
+        }
+      } catch (err) {
+        console.warn("[dashboard] roster check failed", err);
+        // Don't block the whole dashboard on a roster read failure
+        rosterMissing = false;
+        setNeedsClass(false);
       }
-      setNeedsClass(false);
     }
-    const [asgns, lvl, rewards, materials] = await Promise.all([
+
+    const settled = await Promise.allSettled([
       assignmentService.getForStudent(uid),
       gamificationService.getStudentLevel(uid),
       gamificationService.getRecentRewards(uid),
-      materialService.getAll(),
     ]);
+
+    const asgns = settled[0].status === "fulfilled" ? settled[0].value : [];
+    const lvl = settled[1].status === "fulfilled" ? settled[1].value : emptyLevel(uid);
+    const rewards =
+      settled[2].status === "fulfilled"
+        ? settled[2].value
+        : { recentXP: [], recentBadges: [] as StudentBadge[], weeklyXP: 0 };
+
+    if (settled[0].status === "rejected") {
+      console.warn("[dashboard] assignments", settled[0].reason);
+      setLoadError(t("sd.loadError"));
+    }
+
     const map: Record<string, Material> = {};
-    materials.forEach(m => { map[m.id] = m; });
+    const missingIds = [...new Set(asgns.map(a => a.materialId))];
+    await Promise.all(
+      missingIds.map(async id => {
+        try {
+          const m = await materialService.getById(id);
+          if (m) map[id] = m;
+        } catch {
+          /* skip one material */
+        }
+      })
+    );
+
     setAssignments(asgns);
     setMaterialsById(map);
     setLevel(lvl);
     setRecentRewards(rewards);
     setLoading(false);
+
+    // Join-class screen only when truly not on roster — still keep rewards loaded above
+    if (rosterMissing) return;
   };
 
   useEffect(() => {
@@ -58,7 +109,13 @@ export default function StudentDashboard() {
     let cancelled = false;
     setLoading(true);
     loadDashboard(user.id)
-      .catch(() => { if (!cancelled) setLoading(false); });
+      .catch(err => {
+        console.warn("[dashboard] load failed", err);
+        if (!cancelled) {
+          setLoadError(t("sd.loadError"));
+          setLoading(false);
+        }
+      });
     return () => { cancelled = true; };
   }, [user?.id]);
 
@@ -71,6 +128,7 @@ export default function StudentDashboard() {
       const updated = await authService.joinClass(user.id, joinCode);
       login(updated);
       toast.success(t("sd.joinedClass", { class: updated.class ?? "" }));
+      setNeedsClass(false);
       setLoading(true);
       await loadDashboard(user.id);
     } catch (err) {
@@ -128,6 +186,11 @@ export default function StudentDashboard() {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto w-full">
+      {loadError && (
+        <div role="alert" className="bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-2xl p-3.5 font-medium">
+          {loadError}
+        </div>
+      )}
       <div className="rounded-3xl p-6 sm:p-7 text-white relative overflow-hidden bg-gradient-to-br from-primary via-[#6B63F0] to-[#8B7CF7] shadow-[var(--shadow-md)]">
         <div className="absolute -top-6 -right-6 opacity-[0.12] pointer-events-none">
           <Sparkles size={140} />

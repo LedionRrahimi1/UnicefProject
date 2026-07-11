@@ -522,7 +522,10 @@ export default function Quiz() {
         if (pct >= 80) {
           await gamificationService.awardXP(user.id, 20, `Rezultat mbi 80% në '${material.title}'`, "quiz", material.id);
         }
-      } catch { /* ignore xp errors */ }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Yjet nuk u ruajtën.";
+        toast.error(msg);
+      }
     }
 
     // Always take student to the full AI report page when we have an assignment

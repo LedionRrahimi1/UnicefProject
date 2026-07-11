@@ -24,7 +24,14 @@ import StudentRewards from "./StudentRewards";
 import StudentPractice from "./StudentPractice";
 
 function ProtectedRoute({ children, role }: { children: React.ReactNode; role?: "teacher" | "student" }) {
-  const { user } = useApp();
+  const { user, authReady } = useApp();
+  if (!authReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-9 h-9 border-[3px] border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
   if (!user) return <Navigate to="/login" replace />;
   if (role && user.role !== role) {
     return <Navigate to={user.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard"} replace />;
@@ -53,7 +60,15 @@ function NotFound() {
 }
 
 function AppRoutes() {
-  const { user } = useApp();
+  const { user, authReady } = useApp();
+
+  if (!authReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-9 h-9 border-[3px] border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <Routes>

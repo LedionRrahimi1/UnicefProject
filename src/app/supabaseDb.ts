@@ -206,6 +206,16 @@ export async function sbGetAssignments(): Promise<Assignment[]> {
   return (data as AssignmentRow[]).map(rowToAssignment);
 }
 
+export async function sbGetAssignmentsForStudent(studentId: string): Promise<Assignment[]> {
+  const { data, error } = await getSupabase()
+    .from("assignments")
+    .select("*")
+    .eq("student_id", studentId)
+    .order("start_date", { ascending: false });
+  if (error) throwSb(error, "Nuk u lexuan detyrat e nxënësit.");
+  return (data as AssignmentRow[]).map(rowToAssignment);
+}
+
 export async function sbUpsertAssignments(list: Assignment[]): Promise<void> {
   if (list.length === 0) return;
   const rows = list.map(assignmentToRow);
@@ -321,7 +331,22 @@ export async function sbSignIn(email: string, password: string): Promise<User> {
     };
     await sbUpsertProfile(profile);
   }
-  return profile;
+  return enrichUserFromRoster(profile);
+}
+
+/** Keep profile.class in sync with the students roster row. */
+export async function enrichUserFromRoster(user: User): Promise<User> {
+  if (user.role !== "student") return user;
+  try {
+    const stu = await sbGetStudentById(user.id);
+    if (!stu) return user;
+    if (user.class === stu.class) return { ...user, class: stu.class };
+    const next: User = { ...user, class: stu.class };
+    await sbUpsertProfile(next);
+    return next;
+  } catch {
+    return user;
+  }
 }
 
 export async function sbSignOut(): Promise<void> {
@@ -331,7 +356,9 @@ export async function sbSignOut(): Promise<void> {
 export async function sbGetSessionUser(): Promise<User | null> {
   const { data } = await getSupabase().auth.getSession();
   if (!data.session?.user) return null;
-  return sbGetProfile(data.session.user.id);
+  const profile = await sbGetProfile(data.session.user.id);
+  if (!profile) return null;
+  return enrichUserFromRoster(profile);
 }
 
 function randomJoinCode(): string {
@@ -769,7 +796,11 @@ export async function sbGetXpForStudent(studentId: string): Promise<XPTransactio
     .select("*")
     .eq("student_id", studentId)
     .order("created_at", { ascending: false });
-  if (error) throwSb(error, "Nuk u lexuan yjet.");
+  if (error) {
+    // Table missing / not migrated yet — don't break the whole student dashboard
+    console.warn("[xp]", error.message);
+    return [];
+  }
   return (data as XpRow[]).map(rowToXp);
 }
 
@@ -794,7 +825,10 @@ export async function sbGetBadgesForStudent(studentId: string): Promise<StudentB
     .select("*")
     .eq("student_id", studentId)
     .order("earned_at", { ascending: false });
-  if (error) throwSb(error, "Nuk u lexuan titujt.");
+  if (error) {
+    console.warn("[badges]", error.message);
+    return [];
+  }
   return (data as BadgeEarnRow[]).map(rowToStudentBadge);
 }
 

@@ -12,6 +12,7 @@ import { aiService, materialService, assignmentService } from "./services";
 import { markSessionStart, trackLearningEvent } from "./learningTracker";
 import type { Material, VocabWord } from "./types";
 import { useT } from "./useT";
+import LessonChatbot, { type PreviousLessonContext } from "./LessonChatbot";
 
 export default function ReadingWorkspace() {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +21,7 @@ export default function ReadingWorkspace() {
   const { t } = useT();
 
   const [material, setMaterial] = useState<Material | null>(null);
+  const [previousLessons, setPreviousLessons] = useState<PreviousLessonContext[]>([]);
   const [loading, setLoading] = useState(true);
   const [fontSize, setFontSize] = useState(18);
   const [lineSpacing, setLineSpacing] = useState(1.8);
@@ -253,6 +255,26 @@ export default function ReadingWorkspace() {
         });
         const asgn = await assignmentService.getByMaterialForStudent(m.id, user.id);
         if (asgn) await assignmentService.markInProgress(asgn.id);
+
+        try {
+          const allAsgn = await assignmentService.getForStudent(user.id);
+          const others = allAsgn.filter(a => a.materialId !== m.id).slice(0, 10);
+          const prior: PreviousLessonContext[] = [];
+          for (const a of others) {
+            const mat = await materialService.getById(a.materialId);
+            if (mat) {
+              prior.push({
+                title: mat.title,
+                summary: mat.summary || mat.keyPoints?.slice(0, 3).join("; "),
+              });
+            }
+          }
+          setPreviousLessons(prior);
+        } catch {
+          setPreviousLessons([]);
+        }
+      } else {
+        setPreviousLessons([]);
       }
     });
   }, [id, user]);
@@ -788,6 +810,8 @@ export default function ReadingWorkspace() {
           )}
         </div>
       </div>
+
+      <LessonChatbot role="student" material={material} previousLessons={previousLessons} />
     </div>
   );
 }
