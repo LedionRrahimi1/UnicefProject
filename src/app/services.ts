@@ -34,6 +34,36 @@ import {
   upsertFlashcardsForMaterial, getFlashcardsForMaterial,
   addMemoryBooster, getMemoryBoosterByAssignment, getMemoryBoostersForStudent,
 } from "./localDb";
+import { isSupabaseEnabled } from "./supabase";
+import {
+  sbGetMaterials,
+  sbGetMaterialById,
+  sbUpsertMaterial,
+  sbDeleteMaterial,
+  sbGetAssignments,
+  sbUpsertAssignments,
+  sbDeleteAssignmentsForMaterial,
+  sbGetAssignmentById,
+  sbRegisterTeacher,
+  sbSignIn,
+  sbSignOut,
+  sbGetSessionUser,
+  sbGetClassesForTeacher,
+  sbCreateClass,
+  sbGetStudentsByClassId,
+  sbGetStudentsByClassName,
+  sbGetStudentById,
+  sbGetStudentsForTeacher,
+  sbCreateStudentAccount,
+  sbRegisterStudentSelf,
+  sbJoinClassWithCode,
+  sbUpdateStudent,
+  sbGetXpForStudent,
+  sbInsertXp,
+  sbGetBadgesForStudent,
+  sbInsertStudentBadge,
+} from "./supabaseDb";
+import type { User } from "./types";
 import {
   countEvents,
   getSessionMinutes,
@@ -54,9 +84,14 @@ const delay = (ms = 300) => new Promise(res => setTimeout(res, ms));
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
+// ── Auth ─────────────────────────────────────────────────────────────────────
+
 export const authService = {
-  async login(email: string, _password: string) {
-    await delay(500);
+  async login(email: string, password: string): Promise<User> {
+    if (isSupabaseEnabled()) {
+      return sbSignIn(email, password);
+    }
+    await delay(400);
     if (email === "mesuesi@mesolehte.com") {
       return { id: "teacher-1", name: "Arta Osmani", email, role: "teacher" as const };
     }
@@ -65,21 +100,107 @@ export const authService = {
     }
     throw new Error("Email ose fjalëkalimi është i gabuar.");
   },
+
+  async registerTeacher(name: string, email: string, password: string): Promise<User> {
+    if (!isSupabaseEnabled()) {
+      throw new Error("Regjistrimi kërkon Supabase. Aktivizo VITE_USE_SUPABASE në .env.");
+    }
+    if (password.length < 6) throw new Error("Fjalëkalimi duhet të ketë së paku 6 karaktere.");
+    return sbRegisterTeacher(name, email, password);
+  },
+
+  async registerStudent(input: {
+    name: string;
+    email: string;
+    password: string;
+    joinCode?: string;
+  }): Promise<User> {
+    if (!isSupabaseEnabled()) {
+      throw new Error("Regjistrimi kërkon Supabase. Aktivizo VITE_USE_SUPABASE në .env.");
+    }
+    if (input.password.length < 6) throw new Error("Fjalëkalimi duhet të ketë së paku 6 karaktere.");
+    return sbRegisterStudentSelf(input);
+  },
+
+  async joinClass(userId: string, joinCode: string): Promise<User> {
+    if (!isSupabaseEnabled()) {
+      throw new Error("Bashkimi me klasën kërkon Supabase.");
+    }
+    const { user } = await sbJoinClassWithCode(userId, joinCode);
+    return user;
+  },
+
+  async logout(): Promise<void> {
+    if (isSupabaseEnabled()) await sbSignOut();
+  },
+
+  async getSessionUser(): Promise<User | null> {
+    if (!isSupabaseEnabled()) return null;
+    try {
+      return await sbGetSessionUser();
+    } catch {
+      return null;
+    }
+  },
 };
 
 // ── Materials ─────────────────────────────────────────────────────────────────
 
+async function publishMaterialCloud(material: Material): Promise<number> {
+  const classStudents = await sbGetStudentsByClassName(material.class);
+  const targetIds = material.targetStudentIds?.filter(Boolean);
+  const students =
+    targetIds && targetIds.length > 0
+      ? classStudents.filter(s => targetIds.includes(s.id))
+      : classStudents;
+
+  const existing = await sbGetAssignments();
+  const today = new Date().toISOString().split("T")[0];
+  const deadline = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const created: Assignment[] = [];
+
+  for (const student of students) {
+    const already = existing.some(
+      a => a.materialId === material.id && a.studentId === student.id
+    );
+    if (already) continue;
+    created.push({
+      id: `asgn-${material.id}-${student.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      materialId: material.id,
+      studentId: student.id,
+      deadline,
+      startDate: today,
+      allowRetry: true,
+      showAnswers: true,
+      enableAudio: true,
+      status: "pending",
+      attempts: 0,
+    });
+  }
+
+  const published: Material = {
+    ...material,
+    status: "published",
+    studentCount: students.length,
+  };
+  await sbUpsertMaterial(published);
+  if (created.length > 0) await sbUpsertAssignments(created);
+  return created.length;
+}
+
 export const materialService = {
   async getAll(): Promise<Material[]> {
-    await delay(200);
+    await delay(150);
+    if (isSupabaseEnabled()) return sbGetMaterials();
     return getMaterials();
   },
   async getById(id: string): Promise<Material | undefined> {
-    await delay(150);
+    await delay(100);
+    if (isSupabaseEnabled()) return sbGetMaterialById(id);
     return getMaterials().find(m => m.id === id);
   },
   async create(data: Partial<Material>): Promise<Material> {
-    await delay(300);
+    await delay(200);
     const mat: Material = {
       id: data.id ?? `mat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       title: data.title ?? "Material i ri",
@@ -105,12 +226,19 @@ export const materialService = {
       adaptationLabel: data.adaptationLabel,
       audioEnabled: data.audioEnabled,
       enabledSections: data.enabledSections,
+      teacherId: data.teacherId,
     };
+    if (isSupabaseEnabled()) return sbUpsertMaterial(mat);
     setMaterials([mat, ...getMaterials()]);
     return mat;
   },
   async update(id: string, patch: Partial<Material>): Promise<Material | undefined> {
-    await delay(200);
+    await delay(150);
+    if (isSupabaseEnabled()) {
+      const current = await sbGetMaterialById(id);
+      if (!current) return undefined;
+      return sbUpsertMaterial({ ...current, ...patch, id });
+    }
     const materials = getMaterials();
     const idx = materials.findIndex(m => m.id === id);
     if (idx < 0) return undefined;
@@ -121,7 +249,18 @@ export const materialService = {
     return updated;
   },
   async updateStatus(id: string, status: Material["status"]): Promise<{ assigned: number }> {
-    await delay(250);
+    await delay(200);
+    if (isSupabaseEnabled()) {
+      const mat = await sbGetMaterialById(id);
+      if (!mat) return { assigned: 0 };
+      if (status === "published") {
+        const assigned = await publishMaterialCloud(mat);
+        return { assigned };
+      }
+      await sbUpsertMaterial({ ...mat, status });
+      return { assigned: 0 };
+    }
+
     const materials = getMaterials();
     const mat = materials.find(m => m.id === id);
     if (!mat) return { assigned: 0 };
@@ -135,7 +274,12 @@ export const materialService = {
     return { assigned: 0 };
   },
   async delete(id: string): Promise<void> {
-    await delay(200);
+    await delay(150);
+    if (isSupabaseEnabled()) {
+      await sbDeleteAssignmentsForMaterial(id);
+      await sbDeleteMaterial(id);
+      return;
+    }
     setMaterials(getMaterials().filter(m => m.id !== id));
     setAssignments(getAssignments().filter(a => a.materialId !== id));
   },
@@ -144,16 +288,22 @@ export const materialService = {
 // ── Students ──────────────────────────────────────────────────────────────────
 
 export const studentService = {
-  async getAll(): Promise<Student[]> {
-    await delay(200);
+  async getAll(teacherId?: string): Promise<Student[]> {
+    await delay(150);
+    if (isSupabaseEnabled()) {
+      if (!teacherId) return [];
+      return sbGetStudentsForTeacher(teacherId);
+    }
     return getStudents();
   },
   async getById(id: string): Promise<Student | undefined> {
-    await delay(150);
+    await delay(100);
+    if (isSupabaseEnabled()) return sbGetStudentById(id);
     return getStudents().find(s => s.id === id);
   },
   async getByClass(classId: string): Promise<Student[]> {
-    await delay(200);
+    await delay(100);
+    if (isSupabaseEnabled()) return sbGetStudentsByClassId(classId);
     const cls = getClasses().find(c => c.id === classId);
     if (!cls) return [];
     return studentsInClass(cls.name);
@@ -165,8 +315,32 @@ export const studentService = {
     readingLevel?: string;
     audioEnabled?: boolean;
     visualPreferred?: boolean;
+    email?: string;
+    password?: string;
+    classId?: string;
+    teacherId?: string;
   }): Promise<Student> {
-    await delay(200);
+    await delay(150);
+    if (isSupabaseEnabled()) {
+      if (!input.teacherId || !input.classId) {
+        throw new Error("Mungon mësuesi ose klasa.");
+      }
+      if (!input.email || !input.password) {
+        throw new Error("Email dhe fjalëkalimi janë të detyrueshëm për nxënësin.");
+      }
+      return sbCreateStudentAccount({
+        teacherId: input.teacherId,
+        classId: input.classId,
+        name: input.name,
+        email: input.email,
+        password: input.password,
+        age: input.age,
+        readingLevel: input.readingLevel,
+        audioEnabled: input.audioEnabled,
+        visualPreferred: input.visualPreferred,
+      });
+    }
+
     const name = input.name.trim();
     if (!name) throw new Error("Emri i nxënësit është i detyrueshëm.");
     if (!input.class.trim()) throw new Error("Zgjidh klasën.");
@@ -185,10 +359,10 @@ export const studentService = {
       audioEnabled: input.audioEnabled ?? true,
       visualPreferred: input.visualPreferred ?? false,
       language: "sq",
+      email: input.email,
     };
     setStudents([student, ...getStudents()]);
 
-    // Keep class studentCount in sync
     setClasses(getClasses().map(c => {
       if (normalizeClassName(c.name) !== normalizeClassName(input.class)) return c;
       return { ...c, studentCount: studentsInClass(c.name).length };
@@ -196,8 +370,24 @@ export const studentService = {
 
     return student;
   },
+  async createClass(teacherId: string, name: string): Promise<ClassGroup> {
+    await delay(100);
+    if (isSupabaseEnabled()) {
+      return sbCreateClass(teacherId, name);
+    }
+    const cls: ClassGroup = {
+      id: `cls-${Date.now()}`,
+      name: name.trim(),
+      studentCount: 0,
+      activeMaterials: 0,
+      averageScore: 0,
+    };
+    setClasses([...getClasses(), cls]);
+    return cls;
+  },
   async update(id: string, patch: Partial<Student>): Promise<Student | undefined> {
-    await delay(150);
+    await delay(100);
+    if (isSupabaseEnabled()) return sbUpdateStudent(id, patch);
     const all = getStudents();
     const idx = all.findIndex(s => s.id === id);
     if (idx < 0) return undefined;
@@ -207,8 +397,12 @@ export const studentService = {
     setStudents(next);
     return updated;
   },
-  async getClasses(): Promise<ClassGroup[]> {
-    await delay(200);
+  async getClasses(teacherId?: string): Promise<ClassGroup[]> {
+    await delay(100);
+    if (isSupabaseEnabled()) {
+      if (!teacherId) return [];
+      return sbGetClassesForTeacher(teacherId);
+    }
     const classes = getClasses();
     const assignments = getAssignments();
     const materials = getMaterials();
@@ -237,27 +431,48 @@ export const studentService = {
 
 export const assignmentService = {
   async getForStudent(studentId: string): Promise<Assignment[]> {
-    await delay(200);
+    await delay(150);
+    if (isSupabaseEnabled()) {
+      const all = await sbGetAssignments();
+      return all
+        .filter(a => a.studentId === studentId)
+        .sort((a, b) => b.startDate.localeCompare(a.startDate));
+    }
     return getAssignments()
       .filter(a => a.studentId === studentId)
       .sort((a, b) => b.startDate.localeCompare(a.startDate));
   },
   async getById(id: string): Promise<Assignment | undefined> {
-    await delay(150);
+    await delay(100);
+    if (isSupabaseEnabled()) return sbGetAssignmentById(id);
     return getAssignments().find(a => a.id === id);
   },
   async getByMaterialForStudent(materialId: string, studentId: string): Promise<Assignment | undefined> {
-    await delay(100);
+    await delay(80);
+    if (isSupabaseEnabled()) {
+      const all = await sbGetAssignments();
+      return all.find(a => a.materialId === materialId && a.studentId === studentId);
+    }
     return getAssignments().find(a => a.materialId === materialId && a.studentId === studentId);
   },
   async create(data: Omit<Assignment, "id">): Promise<Assignment> {
-    await delay(200);
+    await delay(150);
     const asgn: Assignment = { ...data, id: `asgn-${Date.now()}` };
+    if (isSupabaseEnabled()) {
+      await sbUpsertAssignments([asgn]);
+      return asgn;
+    }
     setAssignments([asgn, ...getAssignments()]);
     return asgn;
   },
   async markInProgress(id: string): Promise<void> {
-    await delay(100);
+    await delay(80);
+    if (isSupabaseEnabled()) {
+      const asgn = await sbGetAssignmentById(id);
+      if (!asgn || asgn.status !== "pending") return;
+      await sbUpsertAssignments([{ ...asgn, status: "in-progress" }]);
+      return;
+    }
     setAssignments(getAssignments().map(a =>
       a.id === id && a.status === "pending" ? { ...a, status: "in-progress" as const } : a
     ));
@@ -269,7 +484,30 @@ export const assignmentService = {
     audioUsed: boolean,
     extras?: { timeSpentMinutes?: number }
   ): Promise<void> {
-    await delay(200);
+    await delay(150);
+    if (isSupabaseEnabled()) {
+      const asgn = await sbGetAssignmentById(id);
+      if (!asgn) return;
+      const updated: Assignment = {
+        ...asgn,
+        status: "completed",
+        score,
+        completedAt: new Date().toISOString().split("T")[0],
+        wordsOpened,
+        audioUsed,
+        attempts: (asgn.attempts ?? 0) + 1,
+        ...(extras?.timeSpentMinutes != null ? { timeSpentMinutes: extras.timeSpentMinutes } : {}),
+      };
+      await sbUpsertAssignments([updated]);
+
+      const related = (await sbGetAssignments()).filter(a => a.materialId === asgn.materialId);
+      const done = related.filter(a => a.status === "completed").length;
+      const rate = related.length ? Math.round((done / related.length) * 100) : 0;
+      const mat = await sbGetMaterialById(asgn.materialId);
+      if (mat) await sbUpsertMaterial({ ...mat, completionRate: rate });
+      return;
+    }
+
     setAssignments(getAssignments().map(a =>
       a.id === id ? {
         ...a,
@@ -283,7 +521,6 @@ export const assignmentService = {
       } : a
     ));
 
-    // Refresh material completion rate
     const asgn = getAssignments().find(a => a.id === id);
     if (asgn) {
       const related = getAssignments().filter(a => a.materialId === asgn.materialId);
@@ -626,9 +863,43 @@ export const learningService = {
 // ── Analytics ─────────────────────────────────────────────────────────────────
 
 export const analyticsService = {
-  async getClassOverview() {
-    await delay(250);
-    const assignments = getAssignments();
+  async getClassOverview(teacherId?: string) {
+    await delay(150);
+    let assignments: Assignment[] = [];
+    let students: Student[] = [];
+    let materials: Material[] = [];
+
+    if (isSupabaseEnabled()) {
+      if (!teacherId) {
+        return {
+          averageScore: 0,
+          completionRate: 0,
+          averageTimeMinutes: 0,
+          wordsExplained: 0,
+          audioUsage: 0,
+          averageAttempts: 0,
+          studentCount: 0,
+          activeMaterials: 0,
+          completedTasks: 0,
+          students: [] as Student[],
+          classScores: [] as { name: string; score: number }[],
+          weeklyProgress: [] as { week: string; score: number; completion: number }[],
+          audioByMaterial: [] as { name: string; usage: number }[],
+          recentActivity: [] as { id: string; text: string; time: string }[],
+        };
+      }
+      students = await sbGetStudentsForTeacher(teacherId);
+      materials = (await sbGetMaterials()).filter(
+        m => m.teacherId === teacherId || students.some(s => normalizeClassName(s.class) === normalizeClassName(m.class))
+      );
+      const ids = new Set(students.map(s => s.id));
+      assignments = (await sbGetAssignments()).filter(a => ids.has(a.studentId));
+    } else {
+      students = getStudents();
+      materials = getMaterials();
+      assignments = getAssignments();
+    }
+
     const completed = assignments.filter(a => a.status === "completed" && a.score != null);
     const averageScore = completed.length
       ? Math.round(completed.reduce((s, a) => s + (a.score ?? 0), 0) / completed.length)
@@ -646,6 +917,84 @@ export const analyticsService = {
       ? Math.round((assignments.reduce((s, a) => s + (a.attempts ?? 0), 0) / assignments.length) * 10) / 10
       : 0;
 
+    const byClass = new Map<string, number[]>();
+    for (const s of students) {
+      const list = byClass.get(s.class) ?? [];
+      list.push(s.score);
+      byClass.set(s.class, list);
+    }
+    const classScores = [...byClass.entries()].map(([name, scores]) => ({
+      name,
+      score: scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
+    }));
+
+    const weekBuckets = new Map<string, { scores: number[]; done: number; total: number }>();
+    for (const a of assignments) {
+      const key = a.completedAt || a.startDate || "—";
+      const bucket = weekBuckets.get(key) ?? { scores: [], done: 0, total: 0 };
+      bucket.total += 1;
+      if (a.status === "completed") {
+        bucket.done += 1;
+        if (a.score != null) bucket.scores.push(a.score);
+      }
+      weekBuckets.set(key, bucket);
+    }
+    const weeklyProgress = [...weekBuckets.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-8)
+      .map(([week, b]) => ({
+        week: week.slice(5) || week,
+        score: b.scores.length ? Math.round(b.scores.reduce((x, y) => x + y, 0) / b.scores.length) : 0,
+        completion: b.total ? Math.round((b.done / b.total) * 100) : 0,
+      }));
+
+    const matById = new Map(materials.map(m => [m.id, m]));
+    const audioByMaterial = materials
+      .filter(m => m.status === "published")
+      .slice(0, 8)
+      .map(m => {
+        const related = assignments.filter(a => a.materialId === m.id && a.status === "completed");
+        const used = related.filter(a => a.audioUsed).length;
+        return {
+          name: m.title.slice(0, 22) || m.id,
+          usage: related.length ? Math.round((used / related.length) * 100) : 0,
+        };
+      });
+
+    const recentActivity = completed
+      .slice()
+      .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""))
+      .slice(0, 6)
+      .map(a => {
+        const stu = students.find(s => s.id === a.studentId);
+        const mat = matById.get(a.materialId);
+        return {
+          id: a.id,
+          text: `${stu?.name ?? "Nxënës"} · ${mat?.title ?? "Material"} · ${a.score}%`,
+          time: a.completedAt ?? "",
+        };
+      });
+
+    // Enrich student scores from assignments when student.score is 0
+    const enrichedStudents = students.map(s => {
+      const theirs = completed.filter(a => a.studentId === s.id);
+      const score = theirs.length
+        ? Math.round(theirs.reduce((x, a) => x + (a.score ?? 0), 0) / theirs.length)
+        : s.score;
+      const completedMaterials = theirs.length || s.completedMaterials;
+      let status = s.status;
+      if (score > 0 && score < 55) status = "needs-support";
+      else if (score >= 85) status = "excellent";
+      else if (score > 0) status = "active";
+      return {
+        ...s,
+        score,
+        completedMaterials,
+        status,
+        alertReason: status === "needs-support" ? "Rezultate të ulëta në detyrat e fundit" : s.alertReason,
+      };
+    });
+
     return {
       averageScore,
       completionRate,
@@ -653,6 +1002,14 @@ export const analyticsService = {
       wordsExplained,
       audioUsage,
       averageAttempts,
+      studentCount: students.length,
+      activeMaterials: materials.filter(m => m.status === "published").length,
+      completedTasks: completed.length,
+      students: enrichedStudents,
+      classScores,
+      weeklyProgress,
+      audioByMaterial,
+      recentActivity,
     };
   },
 };
@@ -699,49 +1056,61 @@ function calculateLevel(totalXP: number): { level: number; currentLevelXP: numbe
 
 export const gamificationService = {
   async getStudentLevel(studentId: string): Promise<StudentLevel> {
-    await delay(300);
-    const txs = loadXP().filter(t => t.studentId === studentId);
+    await delay(150);
+    const txs = isSupabaseEnabled()
+      ? await sbGetXpForStudent(studentId)
+      : loadXP().filter(t => t.studentId === studentId);
     const totalXP = txs.reduce((sum, t) => sum + t.amount, 0);
     const { level, currentLevelXP, nextLevelXP, progressPercentage } = calculateLevel(totalXP);
     return { studentId, level, totalXP, currentLevelXP, nextLevelXP, progressPercentage };
   },
 
   async getXPHistory(studentId: string): Promise<XPTransaction[]> {
-    await delay(300);
+    await delay(100);
+    if (isSupabaseEnabled()) return sbGetXpForStudent(studentId);
     return loadXP().filter(t => t.studentId === studentId).reverse();
   },
 
   async awardXP(studentId: string, amount: number, reason: string, sourceType: XPTransaction["sourceType"], sourceId?: string, awardedBy: "system" | "teacher" = "system", teacherId?: string): Promise<{ newTotal: number; levelUp: boolean; newLevel: number; previousLevel: number }> {
-    await delay(400);
-    const txs = loadXP();
-    const prevTotal = txs.filter(t => t.studentId === studentId).reduce((s, t) => s + t.amount, 0);
-    const prevLevel = calculateLevel(prevTotal).level;
+    await delay(200);
+    const prev = await this.getStudentLevel(studentId);
+    const prevTotal = prev.totalXP;
+    const prevLevel = prev.level;
     const newTx: XPTransaction = {
-      id: `xp-${Date.now()}`,
+      id: `xp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       studentId, amount, reason, sourceType, sourceId, awardedBy, teacherId,
       createdAt: new Date().toISOString(),
     };
-    const updated = [...txs, newTx];
-    saveXP(updated);
+    if (isSupabaseEnabled()) {
+      await sbInsertXp(newTx);
+    } else {
+      saveXP([...loadXP(), newTx]);
+    }
     const newTotal = prevTotal + amount;
     const newLevel = calculateLevel(newTotal).level;
     return { newTotal, levelUp: newLevel > prevLevel, newLevel, previousLevel: prevLevel };
   },
 
   async getBadges(): Promise<Badge[]> {
-    await delay(200);
+    await delay(100);
     return [...ALL_BADGES];
   },
 
   async getStudentBadges(studentId: string): Promise<StudentBadge[]> {
-    await delay(300);
+    await delay(100);
+    if (isSupabaseEnabled()) return sbGetBadgesForStudent(studentId);
     return loadStudentBadges().filter(b => b.studentId === studentId);
   },
 
   async getBadgeProgress(studentId: string): Promise<BadgeProgress[]> {
-    await delay(300);
-    const txs = loadXP().filter(t => t.studentId === studentId);
-    const earned = loadStudentBadges().filter(b => b.studentId === studentId).map(b => b.badgeId);
+    await delay(100);
+    const txs = isSupabaseEnabled()
+      ? await sbGetXpForStudent(studentId)
+      : loadXP().filter(t => t.studentId === studentId);
+    const earned = (isSupabaseEnabled()
+      ? await sbGetBadgesForStudent(studentId)
+      : loadStudentBadges().filter(b => b.studentId === studentId)
+    ).map(b => b.badgeId);
     const wordsOpened = txs.filter(t => t.sourceType === "vocabulary").length * 3;
     return ALL_BADGES
       .filter(b => !earned.includes(b.id) && b.isAutomatic && b.conditionValue !== undefined)
@@ -759,20 +1128,26 @@ export const gamificationService = {
   },
 
   async unlockBadge(studentId: string, badgeId: string, awardedBy: "system" | "teacher" = "system", teacherId?: string, teacherMessage?: string): Promise<void> {
-    await delay(300);
-    const existing = loadStudentBadges();
+    await delay(150);
+    const existing = isSupabaseEnabled()
+      ? await sbGetBadgesForStudent(studentId)
+      : loadStudentBadges();
     if (existing.some(b => b.studentId === studentId && b.badgeId === badgeId)) return;
     const newBadge: StudentBadge = {
-      id: `sb-${Date.now()}`,
+      id: `sb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       studentId, badgeId,
       earnedAt: new Date().toISOString().split("T")[0],
       awardedBy, teacherId, teacherMessage,
     };
-    saveStudentBadges([...existing, newBadge]);
+    if (isSupabaseEnabled()) {
+      await sbInsertStudentBadge(newBadge);
+    } else {
+      saveStudentBadges([...loadStudentBadges(), newBadge]);
+    }
   },
 
   async awardTeacherBadge(studentId: string, badgeId: string, teacherId: string, message: string, xpBonus: number): Promise<void> {
-    await delay(500);
+    await delay(200);
     await this.unlockBadge(studentId, badgeId, "teacher", teacherId, message);
     if (xpBonus > 0) {
       await this.awardXP(studentId, xpBonus, "Shpërblim nga mësuesja", "teacher", undefined, "teacher", teacherId);
@@ -780,7 +1155,7 @@ export const gamificationService = {
   },
 
   async getTeacherRewardsOverview(studentIds: string[]) {
-    await delay(500);
+    await delay(150);
     return Promise.all(studentIds.map(async id => {
       const level = await this.getStudentLevel(id);
       const badges = await this.getStudentBadges(id);
@@ -789,12 +1164,12 @@ export const gamificationService = {
   },
 
   async getRecentRewards(studentId: string) {
-    await delay(300);
+    await delay(100);
     const txs = await this.getXPHistory(studentId);
     const badges = await this.getStudentBadges(studentId);
     return {
       recentXP: txs.slice(0, 5),
-      recentBadges: badges.slice(-3).reverse(),
+      recentBadges: badges.slice(0, 3),
       weeklyXP: txs.filter(t => {
         const d = new Date(t.createdAt);
         const now = new Date();

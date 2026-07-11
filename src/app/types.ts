@@ -52,6 +52,7 @@ export interface Material {
   studentCount: number;
   completionRate: number;
   estimatedMinutes: number;
+  teacherId?: string;
   /**
    * If set, publish assigns only these students (personalized variants).
    * If empty/undefined, publish assigns the whole class.
@@ -95,6 +96,9 @@ export interface Student {
   /** Learns better with pictures / diagrams than audio alone. */
   visualPreferred: boolean;
   language: string;
+  email?: string;
+  classId?: string;
+  teacherId?: string;
 }
 
 export interface ClassGroup {
@@ -103,6 +107,8 @@ export interface ClassGroup {
   studentCount: number;
   activeMaterials: number;
   averageScore: number;
+  joinCode?: string;
+  teacherId?: string;
 }
 
 export interface Assignment {

@@ -117,9 +117,13 @@ If visualizations are on (or the group is visual), AI Images generates a child-f
 
 ### 5. Storage and distribution
 
-Each adapted version is saved as a separate material with a label (e.g. `Photosynthesis (Visual · Basic)`), linked to that group’s students.
+With **Supabase** enabled (`VITE_USE_SUPABASE=true`), adapted materials, assignments, **Stars (XP)**, and **Titles (badges)** are saved in the cloud database — not only in the browser. Teachers, classes, and students use **Supabase Auth** + tables (`materials`, `assignments`, `classes`, `students`, `profiles`, `xp_transactions`, `student_badges`).
 
-When the teacher **publishes**, assignments are created **only for the target students** of that version — not the same material for the whole class when variants exist.
+Each adapted version is stored as a separate material with a label (e.g. `Photosynthesis (Visual · Basic)`), linked to that group’s students.
+
+When the teacher **publishes**, assignments are created **only for the target students** of that version — and those students see them after login on any device (same project / env).
+
+Rewards awarded by the teacher (Stars / Titles) sync via Supabase, so the student sees them after refresh on any browser.
 
 ### 6. AI during reading (after publishing)
 
@@ -177,15 +181,17 @@ AI profile + Memory Booster
 
 ## How to demo
 
-1. Log in as teacher: `mesuesi@mesolehte.com` / `demo123`
-2. **Create material** → paste text → choose class / students  
-3. Keep **“Adapt to each student’s needs”** on → **Adapt with AI**  
-4. Under **Materials** you will see the versions (labels: Visual, Basic, Advanced…)  
-5. Open review → **Approve** → **Publish**  
-6. Log out and log in as student: `nxenesi@mesolehte.com` / `demo123`  
-7. Open the assignment → read / listen → quiz → results  
+1. Register / log in as **teacher** (Login → Teacher tab), or use an existing teacher account  
+2. **Classes** → create a class (note the join code) → add students, or let students register and join with the code  
+3. **Create material** → paste text → choose class / students  
+4. Keep **“Adapt to each student’s needs”** on → **Adapt with AI**  
+5. Under **Materials** you will see the versions (labels: Visual, Basic, Advanced…)  
+6. Open review → **Approve** → **Publish**  
+7. Log out and log in as a **student** → open the assignment → read / listen → quiz → results  
 
-Data is stored in the browser `localStorage` (no database yet) — teacher and student must use the **same browser**.
+**Data:** with Supabase on, materials and assignments are shared in the cloud (teacher and student do **not** need the same browser). Set up SQL from `supabase/schema.sql` + `supabase/schema_auth.sql` and keys in `.env` (see `supabase/README.md`).
+
+Offline / fallback: if `VITE_USE_SUPABASE=false`, the app uses browser `localStorage` only (same-browser demo).
 
 ---
 
@@ -204,7 +210,12 @@ In `.env`:
 
 ```
 VITE_OPENAI_API_KEY=sk-proj-...
+VITE_USE_SUPABASE=true
+VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
 ```
+
+Run `supabase/schema.sql`, then `supabase/schema_auth.sql`, then `supabase/schema_gamification.sql` in the Supabase SQL Editor before enabling the flag.
 
 ```bash
 npm run dev
@@ -221,15 +232,16 @@ Open http://localhost:5173
 - React, TypeScript, Vite, Tailwind CSS  
 - React Router, Radix UI, Recharts, Lucide  
 - OpenAI: chat (`gpt-5.6-sol`), TTS (`gpt-4o-mini-tts`), Images (`gpt-image-1`)  
-- Local storage: `localStorage` (`localDb.ts`)
+- **Supabase**: Auth + Postgres (`materials`, `assignments`, `classes`, `students`, `profiles`, `xp_transactions`, `student_badges`)  
+- Fallback: `localStorage` (`localDb.ts`) when `VITE_USE_SUPABASE=false`
 
 ---
 
 ## Limitations
 
-- No backend / database: demo in the same browser  
 - OpenAI key is in the frontend for the demo — production should use a server  
-- Full PDF/Word text extraction is limited (pasting text works best)
+- Full PDF/Word text extraction is limited (pasting text works best)  
+- MVP RLS policies are open for hackathon — tighten before production
 
 ---
 
@@ -244,7 +256,13 @@ src/app/
   Quiz.tsx / Results.tsx  → quiz + Memory Booster
   openai.ts               → adapt, TTS, images
   openaiLearning.ts       → profile + post-quiz reports
-  services.ts / localDb.ts
+  services.ts             → app services (local or Supabase)
+  supabase.ts / supabaseDb.ts
+  localDb.ts              → localStorage fallback
+supabase/
+  schema.sql              → materials + assignments
+  schema_auth.sql         → auth profiles, classes, students
+  schema_gamification.sql → XP (stars) + student badges (titles)
 ```
 
 ---
@@ -373,9 +391,13 @@ Nëse vizualizimet janë të ndezura (ose grupi është vizual), AI Images gjene
 
 ### 5. Ruajtja dhe shpërndarja
 
+Me **Supabase** aktiv (`VITE_USE_SUPABASE=true`), materialet e adapuara, detyrat, **Yjet (XP)** dhe **Titujt** ruhen në databazën cloud — jo vetëm në browser. Mësuesit, klasat dhe nxënësit përdorin **Supabase Auth** + tabela (`materials`, `assignments`, `classes`, `students`, `profiles`, `xp_transactions`, `student_badges`).
+
 Çdo version i adaptuar ruhet si material i veçantë me etiketë (p.sh. `Fotosinteza (Vizual · Bazik)`), i lidhur me nxënësit e atij grupi.
 
-Kur mësuesja **publikon**, detyrat krijohen **vetëm për nxënësit e synuar** të atij versioni — jo material i njëjtë për krejt klasën nëse keni variante.
+Kur mësuesja **publikon**, detyrat krijohen **vetëm për nxënësit e synuar** të atij versioni — dhe ata i shohin pas hyrjes nga çdo pajisje (i njëjti projekt / `.env`).
+
+Shpërblimet (Yje / Tituj) sinkronizohen përmes Supabase — nxënësi i sheh pas rifreskimit në çdo browser.
 
 ### 6. AI gjatë leximit (pas publikimit)
 
@@ -433,15 +455,17 @@ AI profil + Memory Booster
 
 ## Si të provohet (demo)
 
-1. Hyr si mësuese: `mesuesi@mesolehte.com` / `demo123`
-2. **Krijo material** → ngjit tekst → zgjidh klasën / nxënësit  
-3. Lë të ndezur **“Adapto sipas nevojave të secilit”** → **Adapto me AI**  
-4. Te **Materialet** do të shohësh versionet (etiketa: Vizual, Bazik, Avancuar…)  
-5. Hap review → **Mirato** → **Publiko**  
-6. Dil dhe hyr si nxënës: `nxenesi@mesolehte.com` / `demo123`  
-7. Hap detyrën → lexo / dëgjo → kuiz → rezultate  
+1. Regjistrohu / hyr si **mësuese** (Login → tab Mësuese), ose përdor një llogari mësueseje ekzistuese  
+2. **Klasat** → krijo klasë (ruaj kodin) → shto nxënës, ose lejo nxënësit të regjistrohen dhe të bashkohen me kod  
+3. **Krijo material** → ngjit tekst → zgjidh klasën / nxënësit  
+4. Lë të ndezur **“Adapto sipas nevojave të secilit”** → **Adapto me AI**  
+5. Te **Materialet** do të shohësh versionet (etiketa: Vizual, Bazik, Avancuar…)  
+6. Hap review → **Mirato** → **Publiko**  
+7. Dil dhe hyr si **nxënës** → hap detyrën → lexo / dëgjo → kuiz → rezultate  
 
-Të dhënat ruhen në `localStorage` të browser-it (nuk ka databazë ende) — mësuesja dhe nxënësi duhet të jenë në **të njëjtin browser**.
+**Të dhënat:** me Supabase aktiv, materialet dhe detyrat ndahen në cloud (mësuesja dhe nxënësi **nuk** duhet të jenë në të njëjtin browser). Ekzekuto SQL nga `supabase/schema.sql` + `supabase/schema_auth.sql` dhe vendos çelësat në `.env` (shih `supabase/README.md`).
+
+Nëse `VITE_USE_SUPABASE=false`, app-i përdor vetëm `localStorage` (demo në të njëjtin browser).
 
 ---
 
@@ -460,7 +484,12 @@ Në `.env`:
 
 ```
 VITE_OPENAI_API_KEY=sk-proj-...
+VITE_USE_SUPABASE=true
+VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
 ```
+
+Ekzekuto `supabase/schema.sql`, pastaj `supabase/schema_auth.sql`, pastaj `supabase/schema_gamification.sql` në SQL Editor të Supabase para se të aktivizosh flag-un.
 
 ```bash
 npm run dev
@@ -477,15 +506,16 @@ Hape http://localhost:5173
 - React, TypeScript, Vite, Tailwind CSS  
 - React Router, Radix UI, Recharts, Lucide  
 - OpenAI: chat (`gpt-5.6-sol`), TTS (`gpt-4o-mini-tts`), Images (`gpt-image-1`)  
-- Ruajtje lokale: `localStorage` (`localDb.ts`)
+- **Supabase**: Auth + Postgres (`materials`, `assignments`, `classes`, `students`, `profiles`, `xp_transactions`, `student_badges`)  
+- Fallback: `localStorage` (`localDb.ts`) kur `VITE_USE_SUPABASE=false`
 
 ---
 
 ## Kufizimet 
 
-- Pa backend / databazë: demo në të njëjtin browser  
 - Çelësi OpenAI është në frontend për demo — në prodhim duhet server  
-- Ngarkimi i PDF/Word si tekst i plotë është i kufizuar (më së miri ngjitja e tekstit)
+- Ngarkimi i PDF/Word si tekst i plotë është i kufizuar (më së miri ngjitja e tekstit)  
+- Politikat RLS MVP janë të hapura për hackathon — shtrëngoji para prodhimit
 
 ---
 
@@ -500,7 +530,13 @@ src/app/
   Quiz.tsx / Results.tsx  → kuiz + Memory Booster
   openai.ts               → adaptim, TTS, figura
   openaiLearning.ts       → profil + raporte pas kuizit
-  services.ts / localDb.ts
+  services.ts             → shërbimet (local ose Supabase)
+  supabase.ts / supabaseDb.ts
+  localDb.ts              → fallback localStorage
+supabase/
+  schema.sql              → materials + assignments
+  schema_auth.sql         → auth profiles, classes, students
+  schema_gamification.sql → XP (yje) + student badges (tituj)
 ```
 
 ---

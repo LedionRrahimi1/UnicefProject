@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { Users, Search, Filter, Plus, ChevronRight, AlertTriangle, Star, X } from "lucide-react";
+import { Users, Search, Filter, Plus, ChevronRight, AlertTriangle, Star, X, Copy } from "lucide-react";
 import { studentService } from "./services";
 import type { Student, ClassGroup } from "./types";
 import { toast } from "sonner";
 import { useT } from "./useT";
+import { useApp } from "./store";
+import { isSupabaseEnabled } from "./supabase";
 
 const statusColors: Record<string, string> = {
   "excellent": "bg-success-muted text-success-muted-foreground",
@@ -24,15 +26,21 @@ const levelKeys: Record<string, string> = {
 
 export default function TeacherClasses() {
   const { t } = useT();
+  const { user } = useApp();
+  const cloud = isSupabaseEnabled();
   const [classes, setClasses] = useState<ClassGroup[]>([]);
   const [selectedClass, setSelectedClass] = useState<ClassGroup | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [classOpen, setClassOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [newClassName, setNewClassName] = useState("");
   const [form, setForm] = useState({
     name: "",
+    email: "",
+    password: "",
     age: "12",
     classId: "",
     readingLevel: "Mesatar",
@@ -47,16 +55,17 @@ export default function TeacherClasses() {
   };
 
   const refreshClasses = async () => {
-    const list = await studentService.getClasses();
+    const list = await studentService.getClasses(user?.id);
     setClasses(list);
     return list;
   };
 
   useEffect(() => {
+    if (!user) return;
     refreshClasses().then(list => {
       if (list.length && !selectedClass) setSelectedClass(list[0]);
     });
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!selectedClass) return;
@@ -70,6 +79,8 @@ export default function TeacherClasses() {
   const openAddModal = () => {
     setForm({
       name: "",
+      email: "",
+      password: "",
       age: "12",
       classId: selectedClass?.id || classes[0]?.id || "",
       readingLevel: "Mesatar",
@@ -79,6 +90,24 @@ export default function TeacherClasses() {
     setAddOpen(true);
   };
 
+  const handleCreateClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setSaving(true);
+    try {
+      const cls = await studentService.createClass(user.id, newClassName);
+      toast.success(t("tc.classCreated", { name: cls.name, code: cls.joinCode || "" }));
+      setClassOpen(false);
+      setNewClassName("");
+      const list = await refreshClasses();
+      setSelectedClass(list.find(c => c.id === cls.id) || cls);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t("tc.classFailed"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     const cls = classes.find(c => c.id === form.classId) || selectedClass;
@@ -86,15 +115,20 @@ export default function TeacherClasses() {
       toast.error(t("tc.selectClass"));
       return;
     }
+    if (!user) return;
     setSaving(true);
     try {
       const student = await studentService.create({
         name: form.name,
         class: cls.name,
+        classId: cls.id,
+        teacherId: user.id,
         age: Number(form.age),
         readingLevel: form.readingLevel,
         audioEnabled: form.audioEnabled,
         visualPreferred: form.visualPreferred,
+        email: form.email || undefined,
+        password: form.password || undefined,
       });
       toast.success(`${student.name} · ${cls.name}`);
       setAddOpen(false);
@@ -108,6 +142,16 @@ export default function TeacherClasses() {
       toast.error(message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const copyCode = async (code?: string) => {
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      toast.success(t("tc.codeCopied"));
+    } catch {
+      toast.error(code);
     }
   };
 
@@ -132,14 +176,34 @@ export default function TeacherClasses() {
           <h1 className="text-2xl font-bold">{t("tc.title")}</h1>
           <p className="text-muted-foreground text-sm mt-0.5">{t("tc.subtitle")}</p>
         </div>
-        <button
-          type="button"
-          onClick={openAddModal}
-          className="flex items-center gap-2 bg-primary text-primary-foreground font-medium px-4 py-2.5 rounded-xl hover:bg-primary/90 transition-colors min-h-11"
-        >
-          <Plus size={16} /> {t("tc.addStudent")}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setClassOpen(true)}
+            className="flex items-center gap-2 border border-border bg-card font-medium px-4 py-2.5 rounded-xl hover:bg-muted transition-colors min-h-11"
+          >
+            <Plus size={16} /> {t("tc.addClass")}
+          </button>
+          <button
+            type="button"
+            onClick={openAddModal}
+            disabled={classes.length === 0}
+            className="flex items-center gap-2 bg-primary text-primary-foreground font-medium px-4 py-2.5 rounded-xl hover:bg-primary/90 transition-colors min-h-11 disabled:opacity-50"
+          >
+            <Plus size={16} /> {t("tc.addStudent")}
+          </button>
+        </div>
       </div>
+
+      {classes.length === 0 && (
+        <div className="bg-card border border-dashed border-border rounded-2xl p-10 text-center">
+          <p className="font-semibold mb-2">{t("tc.noClasses")}</p>
+          <p className="text-sm text-muted-foreground mb-4">{t("tc.noClassesHint")}</p>
+          <button type="button" onClick={() => setClassOpen(true)} className="ui-btn-primary inline-flex">
+            <Plus size={16} /> {t("tc.addClass")}
+          </button>
+        </div>
+      )}
 
       <div className="grid sm:grid-cols-3 gap-4">
         {classes.map(cls => (
@@ -149,12 +213,22 @@ export default function TeacherClasses() {
               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                 <Users size={18} className="text-primary" />
               </div>
-              <div>
-                <p className="font-semibold">{cls.name}</p>
+              <div className="min-w-0">
+                <p className="font-semibold truncate">{cls.name}</p>
                 <p className="text-xs text-muted-foreground">{t("tc.studentsCount", { n: cls.studentCount })}</p>
               </div>
-              <ChevronRight size={16} className="ml-auto text-muted-foreground" />
+              <ChevronRight size={16} className="ml-auto text-muted-foreground shrink-0" />
             </div>
+            {cls.joinCode && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); void copyCode(cls.joinCode); }}
+                className="mb-3 w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-muted/70 text-xs font-bold tracking-wider hover:bg-muted"
+              >
+                <span>{t("tc.joinCode")}: {cls.joinCode}</span>
+                <Copy size={14} />
+              </button>
+            )}
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="bg-muted/50 rounded-xl p-2.5">
                 <p className="text-xs text-muted-foreground">{t("common.materials")}</p>
@@ -211,7 +285,10 @@ export default function TeacherClasses() {
                           <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
                             {s.name[0]}
                           </div>
-                          <span className="font-medium">{s.name}</span>
+                          <div>
+                            <span className="font-medium block">{s.name}</span>
+                            {s.email && <span className="text-xs text-muted-foreground">{s.email}</span>}
+                          </div>
                           {s.status === "needs-support" && <AlertTriangle size={13} className="text-warning" aria-label={t("status.needsSupport")} />}
                           {s.status === "excellent" && <Star size={13} className="text-success" aria-label={t("status.excellent")} />}
                         </div>
@@ -259,10 +336,45 @@ export default function TeacherClasses() {
         </div>
       )}
 
+      {classOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" onClick={() => !saving && setClassOpen(false)} />
+          <div className="relative w-full max-w-md ui-card p-6 shadow-[var(--shadow-lg)]" role="dialog" aria-modal="true">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-extrabold tracking-tight">{t("tc.addClass")}</h2>
+              <button type="button" onClick={() => !saving && setClassOpen(false)} className="p-2 rounded-xl hover:bg-muted min-h-10 min-w-10 flex items-center justify-center" aria-label={t("common.close")}>
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleCreateClass} className="space-y-4">
+              <div>
+                <label className="mb-2 block" htmlFor="cls-name">{t("tc.className")}</label>
+                <input
+                  id="cls-name"
+                  required
+                  value={newClassName}
+                  onChange={e => setNewClassName(e.target.value)}
+                  placeholder="p.sh. VI-1"
+                  className="ui-input"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setClassOpen(false)} disabled={saving} className="ui-btn-secondary flex-1">
+                  {t("common.cancel")}
+                </button>
+                <button type="submit" disabled={saving} className="ui-btn-primary flex-1">
+                  {saving ? t("tc.saving") : t("tc.createClassBtn")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {addOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]" onClick={() => !saving && setAddOpen(false)} />
-          <div className="relative w-full max-w-md ui-card p-6 shadow-[var(--shadow-lg)]" role="dialog" aria-modal="true" aria-labelledby="add-student-title">
+          <div className="relative w-full max-w-md ui-card p-6 shadow-[var(--shadow-lg)] max-h-[90vh] overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="add-student-title">
             <div className="flex items-center justify-between mb-5">
               <h2 id="add-student-title" className="text-lg font-extrabold tracking-tight">{t("tc.addStudent")}</h2>
               <button type="button" onClick={() => !saving && setAddOpen(false)} className="p-2 rounded-xl hover:bg-muted min-h-10 min-w-10 flex items-center justify-center" aria-label={t("common.close")}>
@@ -282,6 +394,37 @@ export default function TeacherClasses() {
                   className="ui-input"
                 />
               </div>
+
+              {cloud && (
+                <>
+                  <div>
+                    <label className="mb-2 block" htmlFor="stu-email">{t("login.email")}</label>
+                    <input
+                      id="stu-email"
+                      type="email"
+                      required
+                      value={form.email}
+                      onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                      placeholder="nxenesi@email.com"
+                      className="ui-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block" htmlFor="stu-pw">{t("login.password")}</label>
+                    <input
+                      id="stu-pw"
+                      type="password"
+                      required
+                      minLength={6}
+                      value={form.password}
+                      onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                      placeholder="min. 6 karaktere"
+                      className="ui-input"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1.5">{t("tc.studentPwHint")}</p>
+                  </div>
+                </>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

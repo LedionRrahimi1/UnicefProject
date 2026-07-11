@@ -3,20 +3,32 @@ import { useNavigate, Link } from "react-router";
 import { Eye, EyeOff, BookOpen, Sparkles, GraduationCap, User } from "lucide-react";
 import { useApp } from "./store";
 import { authService } from "./services";
+import { isSupabaseEnabled } from "./supabase";
 import { toast } from "sonner";
 import { useT } from "./useT";
 import { AppLogo } from "./AppLogo";
+
+type Mode = "login" | "register-teacher" | "register-student";
 
 export default function Login() {
   const { login } = useApp();
   const { t } = useT();
   const navigate = useNavigate();
+  const cloud = isSupabaseEnabled();
+
+  const [mode, setMode] = useState<Mode>("login");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [joinCode, setJoinCode] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const finish = (user: { name: string; role: string }) => {
+    toast.success(t("login.welcome", { name: user.name }));
+    navigate(user.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard");
+  };
 
   const doLogin = async (e?: string, p?: string) => {
     setLoading(true);
@@ -24,16 +36,53 @@ export default function Login() {
     try {
       const user = await authService.login(e ?? email, p ?? password);
       login(user);
-      toast.success(t("login.welcome", { name: user.name }));
-      navigate(user.role === "teacher" ? "/teacher/dashboard" : "/student/dashboard");
-    } catch (err: any) {
-      setError(err.message);
+      finish(user);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t("login.failed"));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = (ev: React.FormEvent) => { ev.preventDefault(); doLogin(); };
+  const doRegisterTeacher = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const user = await authService.registerTeacher(name, email, password);
+      login(user);
+      finish(user);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t("login.registerFailed"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const doRegisterStudent = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const user = await authService.registerStudent({
+        name,
+        email,
+        password,
+        joinCode: joinCode.trim() || undefined,
+      });
+      login(user);
+      finish(user);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t("login.registerFailed"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = (ev: React.FormEvent) => {
+    ev.preventDefault();
+    if (mode === "login") void doLogin();
+    else if (mode === "register-teacher") void doRegisterTeacher();
+    else void doRegisterStudent();
+  };
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
@@ -72,21 +121,6 @@ export default function Login() {
               ))}
             </div>
           </div>
-
-          <div className="mt-auto pt-10">
-            <div className="bg-white/10 rounded-2xl p-5 backdrop-blur-sm border border-white/10">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold">A</div>
-                <div>
-                  <p className="text-sm font-bold">Arta Osmani</p>
-                  <p className="text-xs text-primary-foreground/70">Mësuese e Biologjisë</p>
-                </div>
-              </div>
-              <p className="text-sm text-primary-foreground/85 leading-relaxed">
-                "Kursen orë pune — dhe nxënësit e mi lexojnë me më shumë kënaqësi."
-              </p>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -97,29 +131,71 @@ export default function Login() {
             <span className="font-extrabold">MësoLehtë AI</span>
           </div>
 
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-foreground mb-2 tracking-tight">{t("login.title")}</h2>
-          <p className="text-muted-foreground text-sm mb-8">{t("login.subtitle")}</p>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-foreground mb-2 tracking-tight">
+            {mode === "login" ? t("login.title") : t("login.registerTitle")}
+          </h2>
+          <p className="text-muted-foreground text-sm mb-6">
+            {mode === "login"
+              ? (cloud ? t("login.subtitleCloud") : t("login.subtitle"))
+              : mode === "register-teacher"
+                ? t("login.registerTeacherHint")
+                : t("login.registerStudentHint")}
+          </p>
 
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            <button onClick={() => doLogin("mesuesi@mesolehte.com", "demo123")} disabled={loading}
-              className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-primary/20 bg-primary/5 hover:bg-primary/10 hover:border-primary/40 transition-all text-sm font-bold text-primary min-h-[5.5rem]">
-              <GraduationCap size={22} />
-              {t("login.asTeacher")}
-            </button>
-            <button onClick={() => doLogin("nxenesi@mesolehte.com", "demo123")} disabled={loading}
-              className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-success/25 bg-success-muted hover:border-success/40 transition-all text-sm font-bold text-success-muted-foreground min-h-[5.5rem]">
-              <User size={22} />
-              {t("login.asStudent")}
-            </button>
-          </div>
+          {cloud && (
+            <div className="flex gap-1 p-1 mb-6 rounded-2xl bg-muted">
+              {(
+                [
+                  ["login", t("login.signIn")],
+                  ["register-teacher", t("login.tabTeacher")],
+                  ["register-student", t("login.tabStudent")],
+                ] as const
+              ).map(([m, label]) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => { setMode(m); setError(""); }}
+                  className={`flex-1 text-xs font-bold py-2.5 rounded-xl transition-colors min-h-10 ${
+                    mode === m ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
 
-          <div className="flex items-center gap-3 mb-6">
-            <div className="flex-1 h-px bg-border" />
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("login.or")}</span>
-            <div className="flex-1 h-px bg-border" />
-          </div>
+          {!cloud && mode === "login" && (
+            <>
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                <button onClick={() => doLogin("mesuesi@mesolehte.com", "demo123")} disabled={loading}
+                  className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-primary/20 bg-primary/5 hover:bg-primary/10 hover:border-primary/40 transition-all text-sm font-bold text-primary min-h-[5.5rem]">
+                  <GraduationCap size={22} />
+                  {t("login.asTeacher")}
+                </button>
+                <button onClick={() => doLogin("nxenesi@mesolehte.com", "demo123")} disabled={loading}
+                  className="flex flex-col items-center gap-2 p-4 rounded-2xl border-2 border-success/25 bg-success-muted hover:border-success/40 transition-all text-sm font-bold text-success-muted-foreground min-h-[5.5rem]">
+                  <User size={22} />
+                  {t("login.asStudent")}
+                </button>
+              </div>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("login.or")}</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+            </>
+          )}
 
           <form onSubmit={handleSubmit} noValidate className="space-y-4">
+            {mode !== "login" && (
+              <div>
+                <label htmlFor="name" className="block mb-2">{t("login.name")}</label>
+                <input id="name" value={name} onChange={e => setName(e.target.value)}
+                  placeholder="Emri juaj" required className="ui-input" />
+              </div>
+            )}
+
             <div>
               <label htmlFor="email" className="block mb-2">{t("login.email")}</label>
               <input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)}
@@ -131,8 +207,8 @@ export default function Login() {
               <label htmlFor="password" className="block mb-2">{t("login.password")}</label>
               <div className="relative">
                 <input id="password" type={showPw ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••" required autoComplete="current-password"
-                  className="ui-input pr-12" />
+                  placeholder="••••••••" required autoComplete={mode === "login" ? "current-password" : "new-password"}
+                  className="ui-input pr-12" minLength={6} />
                 <button type="button" onClick={() => setShowPw(!showPw)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-lg" aria-label={showPw ? t("login.hidePw") : t("login.showPw")}>
                   {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -140,14 +216,14 @@ export default function Login() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-2">
-              <label className="flex items-center gap-2 cursor-pointer min-h-10">
-                <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)}
-                  className="w-4 h-4 rounded accent-primary" />
-                <span className="text-sm text-muted-foreground font-medium">{t("login.remember")}</span>
-              </label>
-              <button type="button" className="text-sm font-semibold text-primary hover:underline min-h-10">{t("login.forgot")}</button>
-            </div>
+            {mode === "register-student" && (
+              <div>
+                <label htmlFor="join" className="block mb-2">{t("login.joinCodeOptional")}</label>
+                <input id="join" value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())}
+                  placeholder="ABC123" className="ui-input tracking-widest font-bold uppercase" maxLength={8} />
+                <p className="text-xs text-muted-foreground mt-1.5">{t("login.joinCodeOptionalHint")}</p>
+              </div>
+            )}
 
             {error && (
               <div role="alert" className="bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-2xl p-3.5 font-medium">
@@ -158,14 +234,16 @@ export default function Login() {
             <button type="submit" disabled={loading} className="ui-btn-primary w-full mt-2">
               {loading ? (
                 <><div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" /> {t("login.signingIn")}</>
-              ) : t("login.signIn")}
+              ) : mode === "login" ? t("login.signIn") : t("login.registerBtn")}
             </button>
           </form>
 
-          <div className="mt-6 p-4 bg-muted/80 rounded-2xl text-xs text-muted-foreground space-y-1 border border-border">
-            <p><span className="font-bold text-foreground">{t("login.demoTeacher")}</span> mesuesi@mesolehte.com · demo123</p>
-            <p><span className="font-bold text-foreground">{t("login.demoStudent")}</span> nxenesi@mesolehte.com · demo123</p>
-          </div>
+          {!cloud && (
+            <div className="mt-6 p-4 bg-muted/80 rounded-2xl text-xs text-muted-foreground space-y-1 border border-border">
+              <p><span className="font-bold text-foreground">{t("login.demoTeacher")}</span> mesuesi@mesolehte.com · demo123</p>
+              <p><span className="font-bold text-foreground">{t("login.demoStudent")}</span> nxenesi@mesolehte.com · demo123</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -7,10 +7,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { materialService, aiService, learningService, studentService } from "./services";
-import { MOCK_CLASSES } from "./mockData";
 import { buildAdaptationCohorts } from "./adaptationCohorts";
-import type { Student } from "./types";
+import type { ClassGroup, Student } from "./types";
 import { useT } from "./useT";
+import { useApp } from "./store";
 
 class AiAbortedError extends Error {
   constructor() {
@@ -31,6 +31,7 @@ const AI_STEPS_BASE = [
 export default function MaterialCreate() {
   const navigate = useNavigate();
   const { t } = useT();
+  const { user } = useApp();
   const [step, setStep] = useState(0);
   const [processing, setProcessing] = useState(false);
   const [aiStepIdx, setAiStepIdx] = useState(-1);
@@ -47,7 +48,8 @@ export default function MaterialCreate() {
 
   // Step 2
   const [audience, setAudience] = useState<"class" | "student">("class");
-  const [selectedClass, setSelectedClass] = useState(MOCK_CLASSES[0].id);
+  const [classes, setClasses] = useState<ClassGroup[]>([]);
+  const [selectedClass, setSelectedClass] = useState("");
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [classStudents, setClassStudents] = useState<Student[]>([]);
   const [personalizeByNeeds, setPersonalizeByNeeds] = useState(true);
@@ -96,6 +98,21 @@ export default function MaterialCreate() {
   };
 
   useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    studentService.getClasses(user.id).then(list => {
+      if (cancelled) return;
+      setClasses(list);
+      setSelectedClass(prev => prev || list[0]?.id || "");
+    });
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!selectedClass) {
+      setClassStudents([]);
+      return;
+    }
     let cancelled = false;
     studentService.getByClass(selectedClass).then(list => {
       if (cancelled) return;
@@ -285,6 +302,7 @@ export default function MaterialCreate() {
       adaptationKey: opts.adaptationKey,
       adaptationLabel: opts.adaptationLabel,
       audioEnabled: switches.audio,
+      teacherId: user?.id,
       enabledSections: {
         summary: switches.summary,
         keyPoints: switches.keyPoints,
@@ -343,7 +361,7 @@ export default function MaterialCreate() {
     }, 1800);
 
     const className =
-      MOCK_CLASSES.find(c => c.id === selectedClass)?.name.replace("Klasa ", "") ?? "VI-1";
+      classes.find(c => c.id === selectedClass)?.name.replace(/^Klasa\s+/i, "") ?? "VI-1";
     const adaptationGroupId = `ag-${Date.now()}`;
 
     try {
@@ -550,7 +568,7 @@ export default function MaterialCreate() {
               <label className="text-sm font-medium mb-2 block">{t("common.class")}</label>
               <select value={selectedClass} onChange={e => setSelectedClass(e.target.value)}
                 className="w-full bg-input-background border border-border rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/50 text-foreground" aria-label={t("common.class")}>
-                {MOCK_CLASSES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
 
@@ -716,7 +734,7 @@ export default function MaterialCreate() {
                 <span className="text-muted-foreground shrink-0">{t("mc.audienceLabel")}</span>
                 <span className="font-medium text-right">
                   {audience === "class" && selectedStudents.length === 0
-                    ? MOCK_CLASSES.find(c => c.id === selectedClass)?.name
+                    ? classes.find(c => c.id === selectedClass)?.name
                     : t("mc.studentsCount", { n: targetStudentIds.length })}
                 </span>
               </div>

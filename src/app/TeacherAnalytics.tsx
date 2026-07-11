@@ -1,38 +1,24 @@
 import React, { useEffect, useState } from "react";
 import { BarChart3, TrendingUp, Clock, BookOpen, Headphones, RefreshCw } from "lucide-react";
 import { analyticsService } from "./services";
-import { MOCK_STUDENTS, WEEKLY_PROGRESS_DATA } from "./mockData";
+import { useApp } from "./store";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, PieChart, Pie, Cell, Legend,
+  LineChart, Line,
 } from "recharts";
 import { useT } from "./useT";
 
-const classData = [
-  { name: "VI-1", score: 68 },
-  { name: "VI-2", score: 74 },
-  { name: "VII-1", score: 71 },
-];
-const audioData = [
-  { name: "Fotosinteza", usage: 78 },
-  { name: "Sistemi Diellor", usage: 62 },
-  { name: "Uji", usage: 45 },
-];
-const errorTypes = [
-  { name: "Ideja kryesore", value: 38 },
-  { name: "Fjalori", value: 28 },
-  { name: "Kuptimi i fjalisë", value: 22 },
-  { name: "Detajet", value: 12 },
-];
-const COLORS = ["#4f46e5", "#10b981", "#f59e0b", "#ef4444"];
+type Overview = Awaited<ReturnType<typeof analyticsService.getClassOverview>>;
 
 export default function TeacherAnalytics() {
   const { t } = useT();
-  const [overview, setOverview] = useState<any>(null);
+  const { user } = useApp();
+  const [overview, setOverview] = useState<Overview | null>(null);
 
   useEffect(() => {
-    analyticsService.getClassOverview().then(setOverview);
-  }, []);
+    if (!user?.id) return;
+    analyticsService.getClassOverview(user.id).then(setOverview);
+  }, [user?.id]);
 
   const statCards = overview ? [
     { label: t("ta.avgScore"), value: `${overview.averageScore}%`, icon: TrendingUp, color: "text-primary" },
@@ -52,6 +38,13 @@ export default function TeacherAnalytics() {
     t("ta.note"),
   ];
 
+  const weekly = overview?.weeklyProgress?.length
+    ? overview.weeklyProgress
+    : [{ week: "—", score: 0, completion: 0 }];
+  const classData = overview?.classScores?.length ? overview.classScores : [];
+  const audioData = overview?.audioByMaterial?.length ? overview.audioByMaterial : [];
+  const students = overview?.students ?? [];
+
   return (
     <div className="space-y-6 max-w-6xl">
       <div>
@@ -59,7 +52,6 @@ export default function TeacherAnalytics() {
         <p className="text-muted-foreground text-sm mt-0.5">{t("ta.subtitle")}</p>
       </div>
 
-      {/* Stat cards */}
       {!overview ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           {[...Array(6)].map((_, i) => (
@@ -81,86 +73,59 @@ export default function TeacherAnalytics() {
       )}
 
       <div className="grid lg:grid-cols-2 gap-5">
-        {/* Progress over time */}
         <div className="bg-card rounded-2xl border border-border p-5">
           <h2 className="font-semibold mb-4">{t("ta.progressOverTime")}</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={WEEKLY_PROGRESS_DATA}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="week" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
-              <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" domain={[40, 100]} />
-              <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
-              <Line type="monotone" dataKey="score" stroke="#4f46e5" strokeWidth={2.5} name={t("common.score")} />
-              <Line type="monotone" dataKey="completion" stroke="#10b981" strokeWidth={2.5} name={t("ta.completion")} />
-            </LineChart>
-          </ResponsiveContainer>
+          {(overview?.weeklyProgress?.length ?? 0) === 0 ? (
+            <p className="text-sm text-muted-foreground py-12 text-center">{t("td.noProgressData")}</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={weekly}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="week" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+                <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" domain={[0, 100]} />
+                <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
+                <Line type="monotone" dataKey="score" stroke="#4f46e5" strokeWidth={2.5} name={t("common.score")} />
+                <Line type="monotone" dataKey="completion" stroke="#10b981" strokeWidth={2.5} name={t("ta.completion")} />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
-        {/* Results by class */}
         <div className="bg-card rounded-2xl border border-border p-5">
           <h2 className="font-semibold mb-4">{t("ta.byClass")}</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={classData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" />
-              <YAxis tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" domain={[0, 100]} />
-              <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
-              <Bar dataKey="score" fill="#4f46e5" radius={[6, 6, 0, 0]} name={t("ta.avgScore")} />
-            </BarChart>
-          </ResponsiveContainer>
+          {classData.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-12 text-center">{t("tc.noClasses")}</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={classData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" />
+                <YAxis tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" domain={[0, 100]} />
+                <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
+                <Bar dataKey="score" fill="#4f46e5" radius={[6, 6, 0, 0]} name={t("ta.avgScore")} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
-        {/* Error types */}
-        <div className="bg-card rounded-2xl border border-border p-5">
-          <h2 className="font-semibold mb-4">{t("ta.errorTypes")}</h2>
-          <ResponsiveContainer width="100%" height={240}>
-            <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-              <Pie
-                data={errorTypes}
-                cx="50%"
-                cy="45%"
-                outerRadius={72}
-                dataKey="value"
-                label={false}
-              >
-                {errorTypes.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-              </Pie>
-              <Legend
-                verticalAlign="bottom"
-                height={48}
-                formatter={(name, entry) => {
-                  const value = (entry.payload as { value?: number })?.value;
-                  return (
-                    <span className="text-xs text-foreground">
-                      {name}{typeof value === "number" ? ` · ${value}%` : ""}
-                    </span>
-                  );
-                }}
-              />
-              <Tooltip
-                formatter={(value: number | string) => [`${value}%`, t("ta.errorTypes")]}
-                contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Audio usage */}
-        <div className="bg-card rounded-2xl border border-border p-5">
+        <div className="bg-card rounded-2xl border border-border p-5 lg:col-span-2">
           <h2 className="font-semibold mb-4">{t("ta.audioByMaterial")}</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={audioData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis type="number" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" domain={[0, 100]} />
-              <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" width={80} />
-              <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
-              <Bar dataKey="usage" fill="#10b981" radius={[0, 6, 6, 0]} name={t("ta.audioUse")} />
-            </BarChart>
-          </ResponsiveContainer>
+          {audioData.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">{t("td.noActivity")}</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={audioData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis type="number" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" domain={[0, 100]} />
+                <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" width={100} />
+                <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
+                <Bar dataKey="usage" fill="#10b981" radius={[0, 6, 6, 0]} name={t("ta.audioUse")} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
-      {/* Students table */}
       <div className="bg-card rounded-2xl border border-border overflow-hidden">
         <div className="p-5 border-b border-border">
           <h2 className="font-semibold">{t("ta.studentsTable")}</h2>
@@ -176,7 +141,13 @@ export default function TeacherAnalytics() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {MOCK_STUDENTS.map(s => (
+              {students.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground text-sm">
+                    {t("tc.noStudents")}
+                  </td>
+                </tr>
+              ) : students.map(s => (
                 <tr key={s.id} className="hover:bg-muted/20 transition-colors">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -194,7 +165,7 @@ export default function TeacherAnalytics() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{s.completedMaterials}</td>
-                  <td className="px-4 py-3 text-muted-foreground">16 min</td>
+                  <td className="px-4 py-3 text-muted-foreground">—</td>
                   <td className="px-4 py-3">
                     {s.alertReason && <span className="text-xs text-warning-muted-foreground bg-warning-muted px-2 py-1 rounded-lg">{s.alertReason}</span>}
                   </td>
