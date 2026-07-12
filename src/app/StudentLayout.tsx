@@ -5,6 +5,7 @@ import { useApp } from "./store";
 import AccessibilityPanel from "./AccessibilityPanel";
 import { AccessibilityIcon } from "./AccessibilityIcon";
 import { AppLogo } from "./AppLogo";
+import { APP_NAME } from "./brand";
 import { useT } from "./useT";
 import { Toaster } from "sonner";
 
@@ -83,7 +84,7 @@ export default function StudentLayout() {
         <div className="flex items-center gap-3 px-4 py-5">
           <AppLogo size={40} />
           <div>
-            <p className="font-extrabold text-sm text-foreground leading-tight">MësoLehtë AI</p>
+            <p className="font-extrabold text-sm text-foreground leading-tight">{APP_NAME}</p>
             <p className="text-xs text-muted-foreground font-medium">{t("nav.studentSpace")}</p>
           </div>
         </div>
@@ -111,7 +112,7 @@ export default function StudentLayout() {
         <div className="flex items-center justify-between px-4 py-4">
           <div className="flex items-center gap-2.5">
             <AppLogo size={36} />
-            <span className="font-extrabold text-sm">MësoLehtë AI</span>
+            <span className="font-extrabold text-sm">{APP_NAME}</span>
           </div>
           <button onClick={() => setMobileOpen(false)} className="p-2.5 hover:bg-muted rounded-2xl min-h-11 min-w-11 flex items-center justify-center" aria-label={t("a11y.close")}>
             <X size={18} />

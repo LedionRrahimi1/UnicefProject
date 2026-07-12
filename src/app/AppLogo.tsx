@@ -1,5 +1,6 @@
 import React from "react";
 import logo from "../assets/mesolehte-logo.png";
+import { APP_NAME } from "./brand";
 
 type Props = {
   size?: number;
@@ -11,7 +12,7 @@ export function AppLogo({ size = 40, className = "" }: Props) {
   return (
     <img
       src={logo}
-      alt="MësoLehtë AI"
+      alt={APP_NAME}
       width={size}
       height={size}
       className={`shrink-0 rounded-2xl object-cover shadow-sm shadow-primary/20 ${className}`}

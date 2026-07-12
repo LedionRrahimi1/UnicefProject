@@ -7,6 +7,7 @@ import { isSupabaseEnabled } from "./supabase";
 import { toast } from "sonner";
 import { useT } from "./useT";
 import { AppLogo } from "./AppLogo";
+import { APP_NAME } from "./brand";
 
 type Mode = "login" | "register-teacher" | "register-student";
 
@@ -92,7 +93,7 @@ export default function Login() {
         <div className="relative z-10 flex flex-col h-full">
           <Link to="/" className="flex items-center gap-3 mb-14">
             <AppLogo size={44} />
-            <span className="font-extrabold text-xl tracking-tight">MësoLehtë AI</span>
+            <span className="font-extrabold text-xl tracking-tight">{APP_NAME}</span>
           </Link>
 
           <div className="flex-1 flex flex-col justify-center">
@@ -128,7 +129,7 @@ export default function Login() {
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex items-center gap-2.5 mb-8">
             <AppLogo size={36} />
-            <span className="font-extrabold">MësoLehtë AI</span>
+            <span className="font-extrabold">{APP_NAME}</span>
           </div>
 
           <h2 className="text-2xl sm:text-3xl font-extrabold text-foreground mb-2 tracking-tight">

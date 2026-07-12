@@ -9,6 +9,7 @@ import { useApp } from "./store";
 import AccessibilityPanel from "./AccessibilityPanel";
 import { AccessibilityIcon } from "./AccessibilityIcon";
 import { AppLogo } from "./AppLogo";
+import { APP_NAME } from "./brand";
 import { useT } from "./useT";
 import { Toaster } from "sonner";
 
@@ -70,7 +71,7 @@ export default function TeacherLayout() {
         <AppLogo size={40} className="shrink-0" />
         {!collapsed && (
           <div className="min-w-0">
-            <p className="font-extrabold text-sm text-foreground leading-tight truncate">MësoLehtë AI</p>
+            <p className="font-extrabold text-sm text-foreground leading-tight truncate">{APP_NAME}</p>
             <p className="text-xs text-muted-foreground font-medium">{t("nav.teacherSpace")}</p>
           </div>
         )}

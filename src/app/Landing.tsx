@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { BookOpen, Sparkles, ArrowRight, Upload, Wand2, Eye, Share2, Check, Shield, Users, Zap, Brain, Headphones } from "lucide-react";
 import { useT } from "./useT";
 import { AppLogo } from "./AppLogo";
+import { APP_NAME } from "./brand";
 
 const features = [
   { icon: Wand2, title: "Thjeshtësim me AI", desc: "Tekstet adaptohen automatikisht sipas nivelit të leximit të çdo nxënësi." },
@@ -30,7 +31,7 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto px-5 h-16 flex items-center gap-4">
           <div className="flex items-center gap-2.5">
             <AppLogo size={32} className="rounded-xl" />
-            <span className="font-bold text-foreground">MësoLehtë AI</span>
+            <span className="font-bold text-foreground">{APP_NAME}</span>
           </div>
           <div className="ml-auto flex items-center gap-3">
             <Link to="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-2">{t("landing.signIn")}</Link>
@@ -195,7 +196,7 @@ export default function Landing() {
 
       {/* Footer */}
       <footer className="border-t border-border py-8 px-5 text-center text-sm text-muted-foreground">
-        <p>© 2026 MësoLehtë AI — Çdo tekst, në nivelin e duhur për çdo nxënës.</p>
+        <p>© 2026 {APP_NAME} — Çdo tekst, në nivelin e duhur për çdo nxënës.</p>
       </footer>
     </div>
   );

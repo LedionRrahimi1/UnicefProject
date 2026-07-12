@@ -2,9 +2,10 @@
 import { useParams, useNavigate } from "react-router";
 import {
   ChevronLeft, Headphones, BookOpen, Award, Clock, FileText, Star,
-  Sparkles, Brain, AlertCircle, ImageIcon,
+  Sparkles, Brain, AlertCircle, ImageIcon, Loader2, RefreshCw,
 } from "lucide-react";
-import { studentService, gamificationService, learningService, materialService } from "./services";
+import { toast } from "sonner";
+import { studentService, gamificationService, learningService, materialService, assignmentService } from "./services";
 import type { Student, StudentLevel, LearningProfile, LearningReport, Material } from "./types";
 import { WEEKLY_PROGRESS_DATA } from "./mockData";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -20,6 +21,17 @@ export default function StudentProfile() {
   const [reports, setReports] = useState<LearningReport[]>([]);
   const [materialsById, setMaterialsById] = useState<Record<string, Material>>({});
   const [openReportId, setOpenReportId] = useState<string | null>(null);
+  const [completedCount, setCompletedCount] = useState(0);
+  const [generatingReports, setGeneratingReports] = useState(false);
+
+  const reloadReports = async (studentId: string) => {
+    const [prof, reps] = await Promise.all([
+      learningService.getProfile(studentId),
+      learningService.getReportsForStudent(studentId),
+    ]);
+    setProfile(prof ?? null);
+    setReports(reps);
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -29,16 +41,37 @@ export default function StudentProfile() {
       learningService.getProfile(id),
       learningService.getReportsForStudent(id),
       materialService.getAll(),
-    ]).then(([s, lvl, prof, reps, mats]) => {
+      assignmentService.getForStudent(id),
+    ]).then(([s, lvl, prof, reps, mats, asgns]) => {
       setStudent(s ?? null);
       setLevel(lvl);
       setProfile(prof ?? null);
       setReports(reps);
+      setCompletedCount(asgns.filter(a => a.status === "completed").length);
       const map: Record<string, Material> = {};
       mats.forEach(m => { map[m.id] = m; });
       setMaterialsById(map);
     });
   }, [id]);
+
+  const handleGenerateMissingReports = async () => {
+    if (!id || generatingReports) return;
+    setGeneratingReports(true);
+    try {
+      const n = await learningService.generateMissingReportsForStudent(id);
+      await reloadReports(id);
+      if (n === 0) {
+        toast.message(t("sp2.noMissingReports"));
+      } else {
+        toast.success(t("sp2.reportsGenerated", { n }));
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t("sp2.reportsGenFailed");
+      toast.error(msg);
+    } finally {
+      setGeneratingReports(false);
+    }
+  };
 
   if (!student) return (
     <div className="flex items-center justify-center h-60">
@@ -223,9 +256,36 @@ export default function StudentProfile() {
             <FileText size={16} className="text-primary" /> {t("sp2.reports")}
           </h2>
           {reports.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("sp2.noReports")}</p>
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">{t("sp2.noReports")}</p>
+              {completedCount > 0 && (
+                <>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{t("sp2.missingReportsHint")}</p>
+                  <button
+                    type="button"
+                    onClick={() => void handleGenerateMissingReports()}
+                    disabled={generatingReports}
+                    className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {generatingReports ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                    {generatingReports ? t("sp2.generatingReports") : t("sp2.generateMissingReports")}
+                  </button>
+                </>
+              )}
+            </div>
           ) : (
             <div className="space-y-3">
+              {completedCount > reports.length && (
+                <button
+                  type="button"
+                  onClick={() => void handleGenerateMissingReports()}
+                  disabled={generatingReports}
+                  className="inline-flex items-center gap-2 text-xs font-medium text-primary hover:underline disabled:opacity-50"
+                >
+                  {generatingReports ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                  {t("sp2.generateMissingReports")}
+                </button>
+              )}
               {reports.map(rep => {
                 const mat = materialsById[rep.materialId];
                 const open = openReportId === rep.id;

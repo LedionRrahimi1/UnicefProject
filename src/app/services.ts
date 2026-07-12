@@ -809,6 +809,8 @@ export const learningService = {
     attempts: number;
     wrongQuestions: WrongQuestionDetail[];
     hintCount: number;
+    /** When true, do not mark/complete the assignment again (e.g. teacher regenerating a missing report). */
+    skipAssignmentComplete?: boolean;
   }): Promise<{ report: LearningReport; profile: LearningProfile; booster: MemoryBoosterPack }> {
     const material = isSupabaseEnabled()
       ? await sbGetMaterialById(input.materialId)
@@ -952,17 +954,45 @@ export const learningService = {
       addMemoryBooster(booster);
     }
 
-    await assignmentService.complete(
-      input.assignmentId,
-      input.score,
-      vocabOpened,
-      audioPlayCount > 0,
-      { timeSpentMinutes }
-    );
+    if (!input.skipAssignmentComplete) {
+      await assignmentService.complete(
+        input.assignmentId,
+        input.score,
+        vocabOpened,
+        audioPlayCount > 0,
+        { timeSpentMinutes }
+      );
+    }
 
     clearSessionStart(input.studentId, input.materialId);
 
     return { report, profile, booster };
+  },
+
+  /**
+   * Create AI reports for completed assignments that have no cloud/local report yet
+   * (e.g. finished before learning_reports table existed).
+   */
+  async generateMissingReportsForStudent(studentId: string): Promise<number> {
+    const asgns = await assignmentService.getForStudent(studentId);
+    const completed = asgns.filter(a => a.status === "completed" && a.score != null);
+    let created = 0;
+    for (const asgn of completed) {
+      const existing = await this.getReportByAssignment(asgn.id);
+      if (existing) continue;
+      await this.runPostLessonAnalysis({
+        studentId,
+        materialId: asgn.materialId,
+        assignmentId: asgn.id,
+        score: asgn.score ?? 0,
+        attempts: asgn.attempts ?? 1,
+        wrongQuestions: [],
+        hintCount: 0,
+        skipAssignmentComplete: true,
+      });
+      created += 1;
+    }
+    return created;
   },
 };
 
